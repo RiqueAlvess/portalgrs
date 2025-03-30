@@ -1,6 +1,6 @@
 
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -113,8 +113,17 @@ const Login = () => {
               >
                 {isSubmitting ? "Entrando..." : "Entrar"}
               </Button>
-              <div className="text-gray-500 text-sm text-center px-4">
-                <p>Para acesso ao sistema, entre em contato com o administrador.</p>
+              <div className="flex justify-between w-full text-sm">
+                <div className="text-gray-500">
+                  <p>Não tem uma conta?</p>
+                  <Button variant="link" className="p-0 h-auto" onClick={() => navigate("/register")}>
+                    Registre-se
+                  </Button>
+                </div>
+                <div className="text-gray-500 text-right">
+                  <p>Para acesso ao sistema, entre</p>
+                  <p>em contato com o administrador.</p>
+                </div>
               </div>
             </CardFooter>
           </form>

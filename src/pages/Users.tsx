@@ -101,8 +101,10 @@ const Users = () => {
         // Mapear usuários auth para um objeto com id -> email
         const usersEmailMap: Record<string, string> = {};
         if (authUsers?.users) {
-          authUsers.users.forEach(user => {
-            usersEmailMap[user.id] = user.email || '';
+          authUsers.users.forEach((user: any) => {
+            if (user && typeof user === 'object' && 'id' in user && 'email' in user) {
+              usersEmailMap[user.id] = user.email || '';
+            }
           });
         }
 

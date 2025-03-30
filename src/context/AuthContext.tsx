@@ -8,6 +8,11 @@ interface Empresa {
   id: string;
   nome: string;
   cnpj: string;
+  razao_social?: string;
+  nome_abreviado?: string;
+  endereco?: string;
+  cidade?: string;
+  uf?: string;
 }
 
 interface PerfilUsuario {
@@ -72,17 +77,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchEmpresas = async (userId: string) => {
     try {
       console.log("Buscando empresas para userId:", userId);
-      const { data, error } = await supabase
-        .from("usuario_empresas")
-        .select(`
-          empresa_id,
-          empresas:empresa_id(
-            id,
-            nome,
-            cnpj
-          )
-        `)
-        .eq("usuario_id", userId);
+      
+      // Verificar se o usuário é admin
+      const { data: perfilData } = await supabase
+        .from("perfis")
+        .select("tipo_usuario")
+        .eq("id", userId)
+        .single();
+      
+      let empresasQuery;
+      
+      if (perfilData?.tipo_usuario === 'admin') {
+        // Se for admin, pega todas as empresas
+        empresasQuery = await supabase
+          .from("empresas")
+          .select("id, nome, cnpj, razao_social, nome_abreviado, endereco, cidade, uf");
+      } else {
+        // Se for usuário normal, pega só as empresas vinculadas
+        empresasQuery = await supabase
+          .from("usuario_empresas")
+          .select(`
+            empresa_id,
+            empresas:empresa_id(
+              id,
+              nome,
+              cnpj,
+              razao_social,
+              nome_abreviado,
+              endereco,
+              cidade,
+              uf
+            )
+          `)
+          .eq("usuario_id", userId);
+      }
+      
+      const { data, error } = empresasQuery;
 
       if (error) {
         console.error("Erro ao buscar empresas:", error);
@@ -90,11 +120,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data && data.length > 0) {
-        const empresasData = data.map(item => ({
-          id: item.empresas.id,
-          nome: item.empresas.nome,
-          cnpj: item.empresas.cnpj
-        }));
+        let empresasData;
+        
+        if (perfilData?.tipo_usuario === 'admin') {
+          // Formato direto para admins
+          empresasData = data;
+        } else {
+          // Transformar formato para usuários normais
+          empresasData = data.map(item => ({
+            id: item.empresas.id,
+            nome: item.empresas.nome,
+            cnpj: item.empresas.cnpj,
+            razao_social: item.empresas.razao_social,
+            nome_abreviado: item.empresas.nome_abreviado,
+            endereco: item.empresas.endereco,
+            cidade: item.empresas.cidade,
+            uf: item.empresas.uf
+          }));
+        }
         
         console.log("Empresas encontradas:", empresasData);
         setEmpresas(empresasData);

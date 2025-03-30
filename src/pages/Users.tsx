@@ -49,13 +49,28 @@ interface Usuario {
     tipo_usuario: "admin" | "normal";
   };
   empresas: { id: string; nome: string }[];
+  telas: { id: string; nome: string; permissao_leitura?: boolean; permissao_escrita?: boolean; permissao_exclusao?: boolean }[];
   ativo: boolean;
+}
+
+interface Tela {
+  id: string;
+  nome: string;
+  codigo: string;
+  descricao: string | null;
+}
+
+interface Empresa {
+  id: string;
+  nome: string;
+  cnpj: string;
 }
 
 const Users = () => {
   const { perfil: usuarioAtual } = useAuth();
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
-  const [empresas, setEmpresas] = useState<{ id: string; nome: string; cnpj: string }[]>([]);
+  const [empresas, setEmpresas] = useState<Empresa[]>([]);
+  const [telas, setTelas] = useState<Tela[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [editingUser, setEditingUser] = useState<Usuario | null>(null);
@@ -69,10 +84,16 @@ const Users = () => {
     senha: "",
     tipoUsuario: "normal",
     empresasVinculadas: [] as string[],
+    telasVinculadas: [] as {
+      id: string; 
+      permissao_leitura: boolean; 
+      permissao_escrita: boolean; 
+      permissao_exclusao: boolean;
+    }[],
     ativo: true
   });
 
-  // Carregar usuários e empresas
+  // Carregar usuários, empresas e telas
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
@@ -87,6 +108,19 @@ const Users = () => {
           toast.error("Erro ao carregar empresas");
         } else if (empresasData) {
           setEmpresas(empresasData);
+        }
+
+        // Buscar telas
+        const { data: telasData, error: telasError } = await supabase
+          .from("telas")
+          .select("*")
+          .eq("ativo", true);
+
+        if (telasError) {
+          console.error("Erro ao carregar telas:", telasError);
+          toast.error("Erro ao carregar telas");
+        } else if (telasData) {
+          setTelas(telasData);
         }
 
         // Buscar usuários com seus emails
@@ -124,11 +158,11 @@ const Users = () => {
         }
 
         if (perfilsData) {
-          // Para cada perfil, buscar suas empresas vinculadas
+          // Para cada perfil, buscar suas empresas e telas vinculadas
           const usuariosCompletos = await Promise.all(
             perfilsData.map(async (perfil) => {
               // Buscar empresas vinculadas ao usuário
-              const { data: vinculacoes, error: vinculacoesError } = await supabase
+              const { data: vinculacoesEmpresas, error: vinculacoesEmpresasError } = await supabase
                 .from("usuario_empresas")
                 .select(`
                   empresa_id,
@@ -136,24 +170,39 @@ const Users = () => {
                 `)
                 .eq("usuario_id", perfil.id);
 
-              if (vinculacoesError) {
-                console.error("Erro ao carregar empresas do usuário:", vinculacoesError);
-                return {
-                  id: perfil.id,
-                  email: usersEmailMap[perfil.id] || "Email não encontrado",
-                  perfil: {
-                    nome: perfil.nome,
-                    tipo_usuario: perfil.tipo_usuario as "admin" | "normal"
-                  },
-                  empresas: [],
-                  ativo: true // Assumimos como ativo por padrão
-                };
+              if (vinculacoesEmpresasError) {
+                console.error("Erro ao carregar empresas do usuário:", vinculacoesEmpresasError);
+              }
+
+              // Buscar telas vinculadas ao usuário
+              const { data: vinculacoesTelas, error: vinculacoesTelaError } = await supabase
+                .from("acesso_telas")
+                .select(`
+                  tela_id,
+                  permissao_leitura,
+                  permissao_escrita,
+                  permissao_exclusao,
+                  tela:tela_id(id, nome)
+                `)
+                .eq("usuario_id", perfil.id);
+
+              if (vinculacoesTelaError) {
+                console.error("Erro ao carregar telas do usuário:", vinculacoesTelaError);
               }
 
               // Formatação das empresas do usuário
-              const empresasUsuario = vinculacoes?.map(v => ({
+              const empresasUsuario = vinculacoesEmpresas?.map(v => ({
                 id: v.empresa.id,
                 nome: v.empresa.nome
+              })) || [];
+
+              // Formatação das telas do usuário
+              const telasUsuario = vinculacoesTelas?.map(v => ({
+                id: v.tela.id,
+                nome: v.tela.nome,
+                permissao_leitura: v.permissao_leitura,
+                permissao_escrita: v.permissao_escrita,
+                permissao_exclusao: v.permissao_exclusao
               })) || [];
 
               return {
@@ -164,6 +213,7 @@ const Users = () => {
                   tipo_usuario: perfil.tipo_usuario as "admin" | "normal"
                 },
                 empresas: empresasUsuario,
+                telas: telasUsuario,
                 ativo: true // Assumimos como ativo por padrão
               };
             })
@@ -190,12 +240,21 @@ const Users = () => {
 
   // Iniciar adição de novo usuário
   const handleAddUser = () => {
+    // Inicializar form data com todas as telas disponíveis
+    const telasIniciais = telas.map(tela => ({
+      id: tela.id,
+      permissao_leitura: true,
+      permissao_escrita: false,
+      permissao_exclusao: false
+    }));
+
     setFormData({
       nome: "",
       email: "",
       senha: "",
       tipoUsuario: "normal",
       empresasVinculadas: [],
+      telasVinculadas: telasIniciais,
       ativo: true
     });
     setIsAddingUser(true);
@@ -205,12 +264,24 @@ const Users = () => {
 
   // Iniciar edição de usuário
   const handleEditUser = (user: Usuario) => {
+    // Mapear telas existentes e preencher com permissões do usuário
+    const telasVinculadas = telas.map(tela => {
+      const telaUsuario = user.telas.find(t => t.id === tela.id);
+      return {
+        id: tela.id,
+        permissao_leitura: telaUsuario?.permissao_leitura ?? true,
+        permissao_escrita: telaUsuario?.permissao_escrita ?? false,
+        permissao_exclusao: telaUsuario?.permissao_exclusao ?? false
+      };
+    });
+
     setFormData({
       nome: user.perfil.nome,
       email: user.email,
       senha: "",
       tipoUsuario: user.perfil.tipo_usuario,
       empresasVinculadas: user.empresas.map(emp => emp.id),
+      telasVinculadas,
       ativo: user.ativo
     });
     setIsAddingUser(false);
@@ -282,6 +353,25 @@ const Users = () => {
           }
         }
 
+        // 4. Vincular telas ao usuário
+        for (const tela of formData.telasVinculadas) {
+          if (tela.permissao_leitura) {
+            const { error: telaError } = await supabase
+              .from("acesso_telas")
+              .insert({
+                usuario_id: userId,
+                tela_id: tela.id,
+                permissao_leitura: tela.permissao_leitura,
+                permissao_escrita: tela.permissao_escrita,
+                permissao_exclusao: tela.permissao_exclusao
+              });
+
+            if (telaError) {
+              console.error("Erro ao vincular tela:", telaError);
+            }
+          }
+        }
+
         toast.success("Usuário adicionado com sucesso!");
       } else if (editingUser) {
         // 1. Atualizar perfil
@@ -310,26 +400,55 @@ const Users = () => {
         }
 
         // 3. Remover todas as vinculações de empresas e adicionar as novas
-        const { error: deleteError } = await supabase
+        const { error: deleteEmpresasError } = await supabase
           .from("usuario_empresas")
           .delete()
           .eq("usuario_id", editingUser.id);
 
-        if (deleteError) {
-          console.error("Erro ao limpar empresas vinculadas:", deleteError);
+        if (deleteEmpresasError) {
+          console.error("Erro ao limpar empresas vinculadas:", deleteEmpresasError);
         }
 
         // 4. Vincular as empresas selecionadas
         for (const empresaId of formData.empresasVinculadas) {
-          const { error: vincError } = await supabase
+          const { error: vincEmpresaError } = await supabase
             .from("usuario_empresas")
             .insert({
               usuario_id: editingUser.id,
               empresa_id: empresaId
             });
 
-          if (vincError) {
-            console.error("Erro ao vincular empresa:", vincError);
+          if (vincEmpresaError) {
+            console.error("Erro ao vincular empresa:", vincEmpresaError);
+          }
+        }
+
+        // 5. Remover todas as vinculações de telas e adicionar as novas
+        const { error: deleteTelaError } = await supabase
+          .from("acesso_telas")
+          .delete()
+          .eq("usuario_id", editingUser.id);
+
+        if (deleteTelaError) {
+          console.error("Erro ao limpar telas vinculadas:", deleteTelaError);
+        }
+
+        // 6. Vincular as telas selecionadas com suas permissões
+        for (const tela of formData.telasVinculadas) {
+          if (tela.permissao_leitura) {
+            const { error: telaError } = await supabase
+              .from("acesso_telas")
+              .insert({
+                usuario_id: editingUser.id,
+                tela_id: tela.id,
+                permissao_leitura: tela.permissao_leitura,
+                permissao_escrita: tela.permissao_escrita,
+                permissao_exclusao: tela.permissao_exclusao
+              });
+
+            if (telaError) {
+              console.error("Erro ao vincular tela:", telaError);
+            }
           }
         }
 
@@ -392,6 +511,37 @@ const Users = () => {
           empresasVinculadas: [...prev.empresasVinculadas, empresaId]
         };
       }
+    });
+  };
+
+  // Atualizar permissões de tela
+  const updateTelaPermission = (telaId: string, permissionType: 'permissao_leitura' | 'permissao_escrita' | 'permissao_exclusao', value: boolean) => {
+    setFormData(prev => {
+      const newTelasVinculadas = [...prev.telasVinculadas];
+      const telaIndex = newTelasVinculadas.findIndex(t => t.id === telaId);
+      
+      if (telaIndex >= 0) {
+        newTelasVinculadas[telaIndex] = {
+          ...newTelasVinculadas[telaIndex],
+          [permissionType]: value
+        };
+        
+        // Se desmarcar leitura, desmarcar também escrita e exclusão
+        if (permissionType === 'permissao_leitura' && !value) {
+          newTelasVinculadas[telaIndex].permissao_escrita = false;
+          newTelasVinculadas[telaIndex].permissao_exclusao = false;
+        }
+        
+        // Se marcar escrita/exclusão, garantir que leitura esteja marcada
+        if ((permissionType === 'permissao_escrita' || permissionType === 'permissao_exclusao') && value) {
+          newTelasVinculadas[telaIndex].permissao_leitura = true;
+        }
+      }
+      
+      return {
+        ...prev,
+        telasVinculadas: newTelasVinculadas
+      };
     });
   };
 
@@ -523,7 +673,7 @@ const Users = () => {
 
       {/* Modal para adicionar/editar usuário */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {isAddingUser ? "Adicionar Novo Usuário" : "Editar Usuário"}
@@ -587,6 +737,8 @@ const Users = () => {
                 </SelectContent>
               </Select>
             </div>
+            
+            {/* Empresas Vinculadas */}
             <div className="grid grid-cols-4 gap-4">
               <Label className="text-right pt-2">Empresas Vinculadas</Label>
               <div className="col-span-3 space-y-2">
@@ -602,6 +754,65 @@ const Users = () => {
                     </Label>
                   </div>
                 ))}
+              </div>
+            </div>
+            
+            {/* Telas e Permissões */}
+            <div className="grid grid-cols-4 gap-4">
+              <Label className="text-right pt-2">Permissões de Telas</Label>
+              <div className="col-span-3">
+                <div className="rounded-md border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Tela</TableHead>
+                        <TableHead className="text-center">Leitura</TableHead>
+                        <TableHead className="text-center">Escrita</TableHead>
+                        <TableHead className="text-center">Exclusão</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {telas.map((tela) => {
+                        const telaVinculada = formData.telasVinculadas.find(t => t.id === tela.id);
+                        const leitura = telaVinculada?.permissao_leitura ?? false;
+                        const escrita = telaVinculada?.permissao_escrita ?? false;
+                        const exclusao = telaVinculada?.permissao_exclusao ?? false;
+                        
+                        return (
+                          <TableRow key={tela.id}>
+                            <TableCell>{tela.nome}</TableCell>
+                            <TableCell className="text-center">
+                              <Checkbox
+                                checked={leitura}
+                                onCheckedChange={(checked) => 
+                                  updateTelaPermission(tela.id, 'permissao_leitura', !!checked)
+                                }
+                              />
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Checkbox
+                                checked={escrita}
+                                disabled={!leitura}
+                                onCheckedChange={(checked) => 
+                                  updateTelaPermission(tela.id, 'permissao_escrita', !!checked)
+                                }
+                              />
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Checkbox
+                                checked={exclusao}
+                                disabled={!leitura}
+                                onCheckedChange={(checked) => 
+                                  updateTelaPermission(tela.id, 'permissao_exclusao', !!checked)
+                                }
+                              />
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             </div>
           </div>

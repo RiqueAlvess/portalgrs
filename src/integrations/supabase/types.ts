@@ -9,6 +9,60 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      absenteismo: {
+        Row: {
+          created_at: string
+          data_fim: string
+          data_inicio: string
+          empresa_id: string
+          funcionario_id: string
+          id: string
+          motivo: string | null
+          observacao: string | null
+          tipo: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data_fim: string
+          data_inicio: string
+          empresa_id: string
+          funcionario_id: string
+          id?: string
+          motivo?: string | null
+          observacao?: string | null
+          tipo: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data_fim?: string
+          data_inicio?: string
+          empresa_id?: string
+          funcionario_id?: string
+          id?: string
+          motivo?: string | null
+          observacao?: string | null
+          tipo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "absenteismo_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "absenteismo_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       empresas: {
         Row: {
           cnpj: string
@@ -32,6 +86,56 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      funcionarios: {
+        Row: {
+          cargo: string
+          created_at: string
+          data_admissao: string
+          departamento: string | null
+          email: string | null
+          empresa_id: string
+          id: string
+          nome: string
+          status: string | null
+          telefone: string | null
+          updated_at: string
+        }
+        Insert: {
+          cargo: string
+          created_at?: string
+          data_admissao: string
+          departamento?: string | null
+          email?: string | null
+          empresa_id: string
+          id?: string
+          nome: string
+          status?: string | null
+          telefone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cargo?: string
+          created_at?: string
+          data_admissao?: string
+          departamento?: string | null
+          email?: string | null
+          empresa_id?: string
+          id?: string
+          nome?: string
+          status?: string | null
+          telefone?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funcionarios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       perfis: {
         Row: {

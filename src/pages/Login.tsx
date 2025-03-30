@@ -1,18 +1,18 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Building } from "lucide-react";
+import { Building, MailIcon, KeyIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Login = () => {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("programador@grsnucleo.com.br");
+  const [password, setPassword] = useState("@Grs2025@");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loginError, setLoginError] = useState("");
   const { login, isAuthenticated } = useAuth();
@@ -72,6 +72,17 @@ const Login = () => {
                   <AlertDescription>{loginError}</AlertDescription>
                 </Alert>
               )}
+              
+              <Card className="bg-blue-50 border-blue-200 p-3">
+                <p className="text-sm text-blue-700 font-medium">Credenciais de teste</p>
+                <div className="flex items-center mt-1 text-sm text-blue-600">
+                  <MailIcon className="h-4 w-4 mr-1" /> programador@grsnucleo.com.br
+                </div>
+                <div className="flex items-center mt-1 text-sm text-blue-600">
+                  <KeyIcon className="h-4 w-4 mr-1" /> @Grs2025@
+                </div>
+              </Card>
+              
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -105,7 +116,6 @@ const Login = () => {
               </Button>
               <div className="text-gray-500 text-sm text-center px-4">
                 <p>Para acesso ao sistema, entre em contato com o administrador.</p>
-                <p className="mt-2 text-xs">Credenciais de teste: programador@grsnucleo.com.br / @Grs2025@</p>
               </div>
             </CardFooter>
           </form>

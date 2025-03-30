@@ -1,6 +1,6 @@
 
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -16,12 +16,19 @@ import {
   UserCog,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
 
 const Layout = () => {
   const { perfil, empresas, empresaAtual, logout, mudarEmpresa } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [navigation, setNavigation] = useState([
+    { name: "Dashboard", path: "/", icon: <LayoutDashboard className="h-5 w-5" /> },
+    { name: "Funcionários", path: "/employees", icon: <Users className="h-5 w-5" /> },
+    { name: "Absenteísmo", path: "/absenteeism", icon: <Calendar className="h-5 w-5" /> },
+    { name: "Exames Médicos", path: "/medical-exams", icon: <FileText className="h-5 w-5" /> },
+  ]);
 
   const handleLogout = async () => {
     await logout();
@@ -35,18 +42,24 @@ const Layout = () => {
     }
   };
 
-  // Navegação padrão disponível para todos os usuários
-  const navigation = [
-    { name: "Dashboard", path: "/", icon: <LayoutDashboard className="h-5 w-5" /> },
-    { name: "Funcionários", path: "/employees", icon: <Users className="h-5 w-5" /> },
-    { name: "Absenteísmo", path: "/absenteeism", icon: <Calendar className="h-5 w-5" /> },
-    { name: "Exames Médicos", path: "/medical-exams", icon: <FileText className="h-5 w-5" /> },
-  ];
+  // Atualizar a navegação sempre que o perfil mudar
+  useEffect(() => {
+    const baseNavigation = [
+      { name: "Dashboard", path: "/", icon: <LayoutDashboard className="h-5 w-5" /> },
+      { name: "Funcionários", path: "/employees", icon: <Users className="h-5 w-5" /> },
+      { name: "Absenteísmo", path: "/absenteeism", icon: <Calendar className="h-5 w-5" /> },
+      { name: "Exames Médicos", path: "/medical-exams", icon: <FileText className="h-5 w-5" /> },
+    ];
 
-  // Adicionar item de navegação para usuários admin
-  if (perfil?.tipo_usuario === "admin") {
-    navigation.push({ name: "Usuários", path: "/users", icon: <UserCog className="h-5 w-5" /> });
-  }
+    // Adicionar item de navegação para usuários admin
+    if (perfil?.tipo_usuario === "admin") {
+      console.log("Usuário admin detectado, adicionando menu de Usuários");
+      baseNavigation.push({ name: "Usuários", path: "/users", icon: <UserCog className="h-5 w-5" /> });
+      toast.success("Bem-vindo, Administrador!");
+    }
+
+    setNavigation(baseNavigation);
+  }, [perfil]);
 
   // Função para obter o texto do tipo de usuário
   const getUserTypeText = (type: string | undefined) => {

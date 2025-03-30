@@ -47,6 +47,12 @@ const Layout = () => {
     navigation.push({ name: "Usuários", path: "/users", icon: <Users className="h-5 w-5" /> });
   }
 
+  // Função para obter o texto do tipo de usuário
+  const getUserTypeText = (type: string | undefined) => {
+    if (type === "admin") return "Administrador";
+    return "Usuário";
+  };
+
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Botão do menu mobile */}
@@ -119,7 +125,7 @@ const Layout = () => {
               <Card className="p-4 bg-sidebar-accent border-none">
                 <div className="flex flex-col">
                   <span className="text-sm font-medium text-white">{perfil?.nome}</span>
-                  <span className="text-xs text-gray-200">{perfil?.tipo_usuario === 'admin' ? 'Administrador' : 'Usuário'}</span>
+                  <span className="text-xs text-gray-200">{getUserTypeText(perfil?.tipo_usuario)}</span>
                   <div className="flex items-center mt-2">
                     <Button
                       variant="ghost"

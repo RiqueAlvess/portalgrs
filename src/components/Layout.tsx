@@ -13,6 +13,7 @@ import {
   LogOut,
   Menu,
   X,
+  UserCog,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -44,7 +45,7 @@ const Layout = () => {
 
   // Adicionar item de navegação para usuários admin
   if (perfil?.tipo_usuario === "admin") {
-    navigation.push({ name: "Usuários", path: "/users", icon: <Users className="h-5 w-5" /> });
+    navigation.push({ name: "Usuários", path: "/users", icon: <UserCog className="h-5 w-5" /> });
   }
 
   // Função para obter o texto do tipo de usuário

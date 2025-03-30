@@ -185,7 +185,7 @@ const Absenteismo = () => {
 
   // Função para processar a tendência mensal
   const obterTendenciaMensal = (absenteismos: any[]) => {
-    const meses: {[key: string]: {days: number, count: number}} = {};
+    const meses: {[key: string]: {name: string, days: number, count: number}} = {};
     const nomesMeses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     
     // Inicializar últimos 6 meses
@@ -194,7 +194,7 @@ const Absenteismo = () => {
       const mesIndex = (hoje.getMonth() - i + 12) % 12;
       const ano = hoje.getFullYear() - (hoje.getMonth() < i ? 1 : 0);
       const chave = `${ano}-${mesIndex+1}`;
-      meses[chave] = { days: 0, count: 0, name: nomesMeses[mesIndex] };
+      meses[chave] = { name: nomesMeses[mesIndex], days: 0, count: 0 };
     }
     
     // Preencher com dados reais
@@ -238,13 +238,13 @@ const Absenteismo = () => {
 
   // Função para processar dados por departamento
   const processarDepartamentos = (absenteismos: any[]) => {
-    const departamentos: {[key: string]: {days: number, count: number}} = {};
+    const departamentos: {[key: string]: {name: string, days: number, count: number}} = {};
     
     absenteismos.forEach(item => {
       const setor = item.setor || "Não especificado";
       
       if (!departamentos[setor]) {
-        departamentos[setor] = { days: 0, count: 0, name: setor };
+        departamentos[setor] = { name: setor, days: 0, count: 0 };
       }
       
       departamentos[setor].count += 1;
@@ -259,7 +259,7 @@ const Absenteismo = () => {
 
   // Função para processar top CIDs
   const processarTopCids = (absenteismos: any[]) => {
-    const cids: {[key: string]: {value: number, desc: string}} = {};
+    const cids: {[key: string]: {name: string, value: number, desc: string}} = {};
     
     absenteismos.forEach(item => {
       if (!item.cid_principal) return;
@@ -268,7 +268,7 @@ const Absenteismo = () => {
       const desc = item.descricao_cid || "Não especificado";
       
       if (!cids[cid]) {
-        cids[cid] = { value: 0, desc, name: `${cid} - ${desc}` };
+        cids[cid] = { name: `${cid} - ${desc}`, value: 0, desc };
       }
       
       cids[cid].value += 1;

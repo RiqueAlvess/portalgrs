@@ -7,37 +7,37 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar, ChevronDown, Filter } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from "recharts";
 
-// Mock data for charts
+// Dados simulados para os gráficos
 const monthlyData = [
   { name: "Jan", days: 120, count: 45 },
-  { name: "Feb", days: 100, count: 40 },
+  { name: "Fev", days: 100, count: 40 },
   { name: "Mar", days: 130, count: 48 },
-  { name: "Apr", days: 85, count: 32 },
-  { name: "May", days: 110, count: 38 },
+  { name: "Abr", days: 85, count: 32 },
+  { name: "Mai", days: 110, count: 38 },
   { name: "Jun", days: 95, count: 36 },
 ];
 
 const typeData = [
-  { name: "Medical Leave", value: 65, color: "#0ea5e9" },
-  { name: "Parental Leave", value: 15, color: "#f97316" },
-  { name: "Work Accident", value: 10, color: "#dc2626" },
-  { name: "Other Absences", value: 10, color: "#8b5cf6" },
+  { name: "Licença Médica", value: 65, color: "#0ea5e9" },
+  { name: "Licença Maternidade", value: 15, color: "#f97316" },
+  { name: "Acidente de Trabalho", value: 10, color: "#dc2626" },
+  { name: "Outras Ausências", value: 10, color: "#8b5cf6" },
 ];
 
 const departmentData = [
-  { name: "Operations", days: 180, count: 60 },
-  { name: "Sales", days: 120, count: 45 },
-  { name: "IT", days: 80, count: 30 },
-  { name: "Finance", days: 60, count: 25 },
-  { name: "HR", days: 40, count: 15 },
+  { name: "Operações", days: 180, count: 60 },
+  { name: "Vendas", days: 120, count: 45 },
+  { name: "TI", days: 80, count: 30 },
+  { name: "Financeiro", days: 60, count: 25 },
+  { name: "RH", days: 40, count: 15 },
 ];
 
 const topCidData = [
-  { name: "A09 - Diarrhea", value: 25, color: "#0ea5e9" },
-  { name: "R51 - Headache", value: 20, color: "#8b5cf6" },
+  { name: "A09 - Diarreia", value: 25, color: "#0ea5e9" },
+  { name: "R51 - Dor de cabeça", value: 20, color: "#8b5cf6" },
   { name: "J11 - Influenza", value: 18, color: "#f97316" },
-  { name: "M54 - Back pain", value: 15, color: "#10b981" },
-  { name: "J03 - Tonsillitis", value: 12, color: "#dc2626" },
+  { name: "M54 - Dor nas costas", value: 15, color: "#10b981" },
+  { name: "J03 - Amigdalite", value: 12, color: "#dc2626" },
 ];
 
 const Absenteeism = () => {
@@ -47,9 +47,9 @@ const Absenteeism = () => {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight">Absenteeism Analysis</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Análise de Absenteísmo</h1>
         <p className="text-muted-foreground">
-          Track and analyze employee absences and health trends
+          Acompanhe e analise ausências de funcionários e tendências de saúde
         </p>
       </div>
 
@@ -58,27 +58,27 @@ const Absenteeism = () => {
           <Select value={period} onValueChange={setPeriod}>
             <SelectTrigger className="w-[180px]">
               <Calendar className="mr-2 h-4 w-4" />
-              <SelectValue placeholder="Select period" />
+              <SelectValue placeholder="Selecione o período" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="30days">Last 30 Days</SelectItem>
-              <SelectItem value="90days">Last 90 Days</SelectItem>
-              <SelectItem value="6months">Last 6 Months</SelectItem>
-              <SelectItem value="1year">Last Year</SelectItem>
+              <SelectItem value="30days">Últimos 30 Dias</SelectItem>
+              <SelectItem value="90days">Últimos 90 Dias</SelectItem>
+              <SelectItem value="6months">Últimos 6 Meses</SelectItem>
+              <SelectItem value="1year">Último Ano</SelectItem>
             </SelectContent>
           </Select>
 
           <Button variant="outline" size="sm" className="gap-1">
             <Filter className="h-4 w-4" />
-            More Filters
+            Mais Filtros
             <ChevronDown className="h-3 w-3" />
           </Button>
         </div>
         
         <Tabs value={metric} onValueChange={setMetric} className="w-[400px]">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="days">Days</TabsTrigger>
-            <TabsTrigger value="count">Occurrences</TabsTrigger>
+            <TabsTrigger value="days">Dias</TabsTrigger>
+            <TabsTrigger value="count">Ocorrências</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
@@ -86,45 +86,45 @@ const Absenteeism = () => {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Absences</CardTitle>
+            <CardTitle className="text-sm font-medium">Total de Ausências</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">241</div>
             <p className="text-xs text-muted-foreground">
-              For the selected period
+              Para o período selecionado
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Days Lost</CardTitle>
+            <CardTitle className="text-sm font-medium">Dias Perdidos</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">640</div>
             <p className="text-xs text-muted-foreground">
-              Avg. 2.7 days per absence
+              Média de 2,7 dias por ausência
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Affected Employees</CardTitle>
+            <CardTitle className="text-sm font-medium">Funcionários Afetados</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">156</div>
             <p className="text-xs text-muted-foreground">
-              12.6% of total workforce
+              12,6% do total de funcionários
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Absenteeism Rate</CardTitle>
+            <CardTitle className="text-sm font-medium">Taxa de Absenteísmo</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">3.5%</div>
+            <div className="text-2xl font-bold">3,5%</div>
             <p className="text-xs text-muted-foreground">
-              1.2% increase from last period
+              Aumento de 1,2% do período anterior
             </p>
           </CardContent>
         </Card>
@@ -133,9 +133,9 @@ const Absenteeism = () => {
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Monthly Trend</CardTitle>
+            <CardTitle>Tendência Mensal</CardTitle>
             <CardDescription>
-              Absence trend over the last 6 months
+              Tendência de ausências nos últimos 6 meses
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -155,9 +155,9 @@ const Absenteeism = () => {
         
         <Card>
           <CardHeader>
-            <CardTitle>Absence by Type</CardTitle>
+            <CardTitle>Ausências por Tipo</CardTitle>
             <CardDescription>
-              Distribution of absences by category
+              Distribuição de ausências por categoria
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -188,9 +188,9 @@ const Absenteeism = () => {
 
         <Card>
           <CardHeader>
-            <CardTitle>Absence by Department</CardTitle>
+            <CardTitle>Ausências por Departamento</CardTitle>
             <CardDescription>
-              Breakdown of absences across departments
+              Distribuição de ausências por departamentos
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -210,9 +210,9 @@ const Absenteeism = () => {
 
         <Card>
           <CardHeader>
-            <CardTitle>Top 5 CID Causes</CardTitle>
+            <CardTitle>Top 5 Causas CID</CardTitle>
             <CardDescription>
-              Most common medical reasons for absence
+              Razões médicas mais comuns para ausências
             </CardDescription>
           </CardHeader>
           <CardContent>

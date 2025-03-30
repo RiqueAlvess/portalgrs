@@ -12,7 +12,6 @@ import Absenteeism from "./pages/Absenteeism";
 import MedicalExams from "./pages/MedicalExams";
 import Users from "./pages/Users";
 import Login from "./pages/Login";
-import Register from "./pages/Register";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -26,7 +25,6 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<Dashboard />} />
             <Route path="employees" element={<Employees />} />

@@ -1,6 +1,6 @@
 
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -105,7 +105,7 @@ const Login = () => {
                 />
               </div>
             </CardContent>
-            <CardFooter className="flex flex-col gap-4">
+            <CardFooter>
               <Button
                 type="submit"
                 className="w-full bg-sidebar-accent hover:bg-sidebar-accent/90"
@@ -113,18 +113,6 @@ const Login = () => {
               >
                 {isSubmitting ? "Entrando..." : "Entrar"}
               </Button>
-              <div className="flex justify-between w-full text-sm">
-                <div className="text-gray-500">
-                  <p>Não tem uma conta?</p>
-                  <Button variant="link" className="p-0 h-auto" onClick={() => navigate("/register")}>
-                    Registre-se
-                  </Button>
-                </div>
-                <div className="text-gray-500 text-right">
-                  <p>Para acesso ao sistema, entre</p>
-                  <p>em contato com o administrador.</p>
-                </div>
-              </div>
             </CardFooter>
           </form>
         </Card>

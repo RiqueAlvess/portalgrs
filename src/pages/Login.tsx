@@ -7,16 +7,29 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Building } from "lucide-react";
+import { toast } from "sonner";
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+
+  // Redirecionar se já estiver autenticado
+  if (isAuthenticated) {
+    navigate("/");
+    return null;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!email || !password) {
+      toast.error("Por favor, preencha todos os campos");
+      return;
+    }
+    
     setIsSubmitting(true);
     
     try {
@@ -81,11 +94,7 @@ const Login = () => {
           </form>
           <div className="p-4 text-center text-sm">
             <div className="text-gray-500 mt-2">
-              <p>Use os dados abaixo para teste:</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Administrador: admin@exemplo.com / senha<br />
-                Usuário: usuario@exemplo.com / senha
-              </p>
+              <p>Para acesso ao sistema, entre em contato com o administrador.</p>
             </div>
           </div>
         </Card>

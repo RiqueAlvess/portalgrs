@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,77 +39,29 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Search, X } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
-// Interface para os usuários simulados
+// Interface para os usuários
 interface Usuario {
   id: string;
-  nome: string;
   email: string;
-  tipoUsuario: "admin" | "normal";
-  empresasVinculadas: { id: string; nome: string }[];
+  perfil: {
+    nome: string;
+    tipo_usuario: "admin" | "normal";
+  };
+  empresas: { id: string; nome: string }[];
   ativo: boolean;
 }
 
-// Dados simulados de usuários
-const usuariosSimulados: Usuario[] = [
-  {
-    id: "1",
-    nome: "Administrador",
-    email: "admin@exemplo.com",
-    tipoUsuario: "admin",
-    empresasVinculadas: [
-      { id: "123", nome: "Empresa Principal Ltda" },
-      { id: "456", nome: "Filial Sul S.A." },
-      { id: "789", nome: "Unidade Norte ME" }
-    ],
-    ativo: true
-  },
-  {
-    id: "2",
-    nome: "Usuário Regular",
-    email: "usuario@exemplo.com",
-    tipoUsuario: "normal",
-    empresasVinculadas: [
-      { id: "123", nome: "Empresa Principal Ltda" },
-      { id: "456", nome: "Filial Sul S.A." }
-    ],
-    ativo: true
-  },
-  {
-    id: "3",
-    nome: "José Silva",
-    email: "jose@exemplo.com",
-    tipoUsuario: "normal",
-    empresasVinculadas: [
-      { id: "123", nome: "Empresa Principal Ltda" }
-    ],
-    ativo: true
-  },
-  {
-    id: "4",
-    nome: "Maria Oliveira",
-    email: "maria@exemplo.com",
-    tipoUsuario: "normal",
-    empresasVinculadas: [
-      { id: "456", nome: "Filial Sul S.A." }
-    ],
-    ativo: false
-  }
-];
-
-// Dados simulados de empresas disponíveis
-const empresasDisponiveis = [
-  { id: "123", nome: "Empresa Principal Ltda", cnpj: "12.345.678/0001-90" },
-  { id: "456", nome: "Filial Sul S.A.", cnpj: "98.765.432/0001-10" },
-  { id: "789", nome: "Unidade Norte ME", cnpj: "11.222.333/0001-44" },
-];
-
 const Users = () => {
-  const { user } = useAuth();
-  const [usuarios, setUsuarios] = useState<Usuario[]>(usuariosSimulados);
+  const { perfil: usuarioAtual } = useAuth();
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [empresas, setEmpresas] = useState<{ id: string; nome: string; cnpj: string }[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [editingUser, setEditingUser] = useState<Usuario | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   // Form states
   const [formData, setFormData] = useState({
@@ -121,9 +73,101 @@ const Users = () => {
     ativo: true
   });
 
+  // Carregar usuários e empresas
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        // Buscar empresas
+        const { data: empresasData, error: empresasError } = await supabase
+          .from("empresas")
+          .select("id, nome, cnpj");
+
+        if (empresasError) {
+          console.error("Erro ao carregar empresas:", empresasError);
+          toast.error("Erro ao carregar empresas");
+        } else if (empresasData) {
+          setEmpresas(empresasData);
+        }
+
+        // Buscar usuários com perfis e empresas vinculadas
+        const { data: perfilsData, error: perfilsError } = await supabase
+          .from("perfis")
+          .select(`
+            id,
+            nome,
+            tipo_usuario,
+            user:id(email)
+          `);
+
+        if (perfilsError) {
+          console.error("Erro ao carregar usuários:", perfilsError);
+          toast.error("Erro ao carregar usuários");
+          return;
+        }
+
+        if (perfilsData) {
+          // Para cada usuário, buscar suas empresas vinculadas
+          const usuariosCompletos = await Promise.all(
+            perfilsData.map(async (perfil) => {
+              // Buscar empresas vinculadas ao usuário
+              const { data: vinculacoes, error: vinculacoesError } = await supabase
+                .from("usuario_empresas")
+                .select(`
+                  empresa_id,
+                  empresa:empresa_id(id, nome)
+                `)
+                .eq("usuario_id", perfil.id);
+
+              if (vinculacoesError) {
+                console.error("Erro ao carregar empresas do usuário:", vinculacoesError);
+                return {
+                  id: perfil.id,
+                  email: perfil.user?.email || "",
+                  perfil: {
+                    nome: perfil.nome,
+                    tipo_usuario: perfil.tipo_usuario as "admin" | "normal"
+                  },
+                  empresas: [],
+                  ativo: true // Assumimos como ativo por padrão
+                };
+              }
+
+              // Formatação das empresas do usuário
+              const empresasUsuario = vinculacoes?.map(v => ({
+                id: v.empresa.id,
+                nome: v.empresa.nome
+              })) || [];
+
+              return {
+                id: perfil.id,
+                email: perfil.user?.email || "",
+                perfil: {
+                  nome: perfil.nome,
+                  tipo_usuario: perfil.tipo_usuario as "admin" | "normal"
+                },
+                empresas: empresasUsuario,
+                ativo: true // Assumimos como ativo por padrão
+              };
+            })
+          );
+
+          setUsuarios(usuariosCompletos);
+        }
+      } catch (error) {
+        console.error("Erro ao carregar dados:", error);
+        toast.error("Erro ao carregar dados");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
   // Filtrar usuários
   const filteredUsers = usuarios.filter(usuario =>
-    usuario.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    usuario.perfil.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
     usuario.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -139,24 +183,26 @@ const Users = () => {
     });
     setIsAddingUser(true);
     setEditingUser(null);
+    setIsDialogOpen(true);
   };
 
   // Iniciar edição de usuário
   const handleEditUser = (user: Usuario) => {
     setFormData({
-      nome: user.nome,
+      nome: user.perfil.nome,
       email: user.email,
       senha: "",
-      tipoUsuario: user.tipoUsuario,
-      empresasVinculadas: user.empresasVinculadas.map(emp => emp.id),
+      tipoUsuario: user.perfil.tipo_usuario,
+      empresasVinculadas: user.empresas.map(emp => emp.id),
       ativo: user.ativo
     });
     setIsAddingUser(false);
     setEditingUser(user);
+    setIsDialogOpen(true);
   };
 
   // Salvar usuário (novo ou editado)
-  const handleSaveUser = () => {
+  const handleSaveUser = async () => {
     if (!formData.nome || !formData.email) {
       toast.error("Nome e email são obrigatórios");
       return;
@@ -167,74 +213,151 @@ const Users = () => {
       return;
     }
 
+    setIsLoading(true);
+
     try {
       if (isAddingUser) {
-        // Simular adição de novo usuário
-        const newUser: Usuario = {
-          id: (usuarios.length + 1).toString(),
-          nome: formData.nome,
+        // 1. Criar usuário na autenticação
+        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
           email: formData.email,
-          tipoUsuario: formData.tipoUsuario as "admin" | "normal",
-          empresasVinculadas: formData.empresasVinculadas.map(id => {
-            const empresa = empresasDisponiveis.find(e => e.id === id);
-            return { id, nome: empresa?.nome || "" };
-          }),
-          ativo: formData.ativo
-        };
-        
-        setUsuarios([...usuarios, newUser]);
+          password: formData.senha,
+          email_confirm: true,
+          user_metadata: {
+            nome: formData.nome,
+            tipo_usuario: formData.tipoUsuario
+          }
+        });
+
+        if (authError) {
+          throw new Error(authError.message);
+        }
+
+        if (!authData.user) {
+          throw new Error("Erro ao criar usuário");
+        }
+
+        const userId = authData.user.id;
+
+        // 2. O trigger já deve ter criado o perfil, mas vamos atualizar os dados
+        const { error: perfilError } = await supabase
+          .from("perfis")
+          .update({
+            nome: formData.nome,
+            tipo_usuario: formData.tipoUsuario
+          })
+          .eq("id", userId);
+
+        if (perfilError) {
+          throw new Error("Erro ao atualizar perfil: " + perfilError.message);
+        }
+
+        // 3. Vincular empresas ao usuário
+        for (const empresaId of formData.empresasVinculadas) {
+          const { error: vincError } = await supabase
+            .from("usuario_empresas")
+            .insert({
+              usuario_id: userId,
+              empresa_id: empresaId
+            });
+
+          if (vincError) {
+            console.error("Erro ao vincular empresa:", vincError);
+          }
+        }
+
         toast.success("Usuário adicionado com sucesso!");
       } else if (editingUser) {
-        // Simular edição de usuário existente
-        const updatedUsers = usuarios.map(u => {
-          if (u.id === editingUser.id) {
-            return {
-              ...u,
-              nome: formData.nome,
-              email: formData.email,
-              tipoUsuario: formData.tipoUsuario as "admin" | "normal",
-              empresasVinculadas: formData.empresasVinculadas.map(id => {
-                const empresa = empresasDisponiveis.find(e => e.id === id);
-                return { id, nome: empresa?.nome || "" };
-              }),
-              ativo: formData.ativo
-            };
+        // 1. Atualizar perfil
+        const { error: perfilError } = await supabase
+          .from("perfis")
+          .update({
+            nome: formData.nome,
+            tipo_usuario: formData.tipoUsuario
+          })
+          .eq("id", editingUser.id);
+
+        if (perfilError) {
+          throw new Error("Erro ao atualizar perfil: " + perfilError.message);
+        }
+
+        // 2. Atualizar senha (se fornecida)
+        if (formData.senha) {
+          const { error: passwordError } = await supabase.auth.admin.updateUserById(
+            editingUser.id,
+            { password: formData.senha }
+          );
+
+          if (passwordError) {
+            throw new Error("Erro ao atualizar senha: " + passwordError.message);
           }
-          return u;
-        });
-        
-        setUsuarios(updatedUsers);
+        }
+
+        // 3. Remover todas as vinculações de empresas e adicionar as novas
+        const { error: deleteError } = await supabase
+          .from("usuario_empresas")
+          .delete()
+          .eq("usuario_id", editingUser.id);
+
+        if (deleteError) {
+          console.error("Erro ao limpar empresas vinculadas:", deleteError);
+        }
+
+        // 4. Vincular as empresas selecionadas
+        for (const empresaId of formData.empresasVinculadas) {
+          const { error: vincError } = await supabase
+            .from("usuario_empresas")
+            .insert({
+              usuario_id: editingUser.id,
+              empresa_id: empresaId
+            });
+
+          if (vincError) {
+            console.error("Erro ao vincular empresa:", vincError);
+          }
+        }
+
         toast.success("Usuário atualizado com sucesso!");
       }
-      
-      // Limpar form e fechar dialog
-      setFormData({
-        nome: "",
-        email: "",
-        senha: "",
-        tipoUsuario: "normal",
-        empresasVinculadas: [],
-        ativo: true
-      });
-      setIsAddingUser(false);
-      setEditingUser(null);
+
+      // Recarregar dados
+      window.location.reload();
     } catch (error) {
       console.error("Erro ao salvar usuário:", error);
-      toast.error("Ocorreu um erro ao salvar o usuário");
+      toast.error("Ocorreu um erro ao salvar o usuário: " + (error as Error).message);
+    } finally {
+      setIsLoading(false);
+      setIsDialogOpen(false);
     }
   };
 
   // Excluir usuário
-  const handleDeleteUser = (id: string) => {
+  const handleDeleteUser = async (id: string) => {
     // Verificar se o usuário não está excluindo a si mesmo
-    if (id === "1") {
-      toast.error("Não é possível excluir o administrador principal");
+    if (id === usuarioAtual?.id) {
+      toast.error("Não é possível excluir seu próprio usuário");
       return;
     }
 
     if (confirm("Tem certeza que deseja excluir este usuário?")) {
-      setUsuarios(usuarios.filter(u => u.id !== id));
-      toast.success("Usuário excluído com sucesso");
+      setIsLoading(true);
+      try {
+        // Excluir o usuário da autenticação - as tabelas relacionadas serão excluídas por causa das constraints ON DELETE CASCADE
+        const { error } = await supabase.auth.admin.deleteUser(id);
+        
+        if (error) {
+          throw new Error(error.message);
+        }
+        
+        toast.success("Usuário excluído com sucesso");
+        
+        // Atualizar lista de usuários
+        setUsuarios(usuarios.filter(u => u.id !== id));
+      } catch (error) {
+        console.error("Erro ao excluir usuário:", error);
+        toast.error("Ocorreu um erro ao excluir o usuário: " + (error as Error).message);
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -255,7 +378,7 @@ const Users = () => {
     });
   };
 
-  if (user?.tipoUsuario !== "admin") {
+  if (usuarioAtual?.tipo_usuario !== "admin") {
     return (
       <div className="flex items-center justify-center min-h-[80vh]">
         <Card className="max-w-md">
@@ -280,118 +403,10 @@ const Users = () => {
     <div className="container mx-auto">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Gerenciamento de Usuários</h1>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button onClick={handleAddUser}>
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Usuário
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>
-                {isAddingUser ? "Adicionar Novo Usuário" : "Editar Usuário"}
-              </DialogTitle>
-              <DialogDescription>
-                Preencha os campos para {isAddingUser ? "adicionar um novo usuário" : "atualizar os dados do usuário"}.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="nome" className="text-right">
-                  Nome
-                </Label>
-                <Input
-                  id="nome"
-                  value={formData.nome}
-                  onChange={(e) => setFormData({...formData, nome: e.target.value})}
-                  className="col-span-3"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="email" className="text-right">
-                  Email
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({...formData, email: e.target.value})}
-                  className="col-span-3"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="senha" className="text-right">
-                  Senha
-                </Label>
-                <Input
-                  id="senha"
-                  type="password"
-                  placeholder={isAddingUser ? "" : "Deixe em branco para manter a mesma"}
-                  value={formData.senha}
-                  onChange={(e) => setFormData({...formData, senha: e.target.value})}
-                  className="col-span-3"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="tipoUsuario" className="text-right">
-                  Tipo de Usuário
-                </Label>
-                <Select
-                  value={formData.tipoUsuario}
-                  onValueChange={(value) => setFormData({...formData, tipoUsuario: value as "admin" | "normal"})}
-                >
-                  <SelectTrigger className="col-span-3">
-                    <SelectValue placeholder="Selecione um tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="admin">Administrador</SelectItem>
-                    <SelectItem value="normal">Usuário Normal</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label className="text-right">Status</Label>
-                <div className="flex items-center space-x-2 col-span-3">
-                  <Checkbox
-                    id="ativo"
-                    checked={formData.ativo}
-                    onCheckedChange={(checked) => 
-                      setFormData({...formData, ativo: checked as boolean})
-                    }
-                  />
-                  <Label htmlFor="ativo">Usuário Ativo</Label>
-                </div>
-              </div>
-              <div className="grid grid-cols-4 gap-4">
-                <Label className="text-right pt-2">Empresas Vinculadas</Label>
-                <div className="col-span-3 space-y-2">
-                  {empresasDisponiveis.map((empresa) => (
-                    <div key={empresa.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`empresa-${empresa.id}`}
-                        checked={formData.empresasVinculadas.includes(empresa.id)}
-                        onCheckedChange={() => toggleEmpresa(empresa.id)}
-                      />
-                      <Label htmlFor={`empresa-${empresa.id}`}>
-                        {empresa.nome} <span className="text-xs text-muted-foreground">({empresa.cnpj})</span>
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => {
-                setIsAddingUser(false);
-                setEditingUser(null);
-              }}>
-                Cancelar
-              </Button>
-              <Button onClick={handleSaveUser}>Salvar</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <Button onClick={handleAddUser}>
+          <Plus className="h-4 w-4 mr-2" />
+          Novo Usuário
+        </Button>
       </div>
 
       <Card>
@@ -419,86 +434,170 @@ const Users = () => {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Empresas</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredUsers.length === 0 ? (
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-sidebar-accent"></div>
+            </div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
-                      Nenhum usuário encontrado
-                    </TableCell>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Empresas</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
-                ) : (
-                  filteredUsers.map((usuario) => (
-                    <TableRow key={usuario.id}>
-                      <TableCell className="font-medium">{usuario.nome}</TableCell>
-                      <TableCell>{usuario.email}</TableCell>
-                      <TableCell>
-                        {usuario.tipoUsuario === "admin" ? "Administrador" : "Usuário Normal"}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          {usuario.empresasVinculadas.map((emp) => (
-                            <span key={emp.id} className="text-sm">
-                              {emp.nome}
-                            </span>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                          usuario.ativo 
-                            ? "bg-green-100 text-green-800" 
-                            : "bg-red-100 text-red-800"
-                        }`}>
-                          {usuario.ativo ? "Ativo" : "Inativo"}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button 
-                                variant="ghost" 
-                                size="icon"
-                                onClick={() => handleEditUser(usuario)}
-                              >
-                                <Pencil className="h-4 w-4" />
-                                <span className="sr-only">Editar</span>
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className="sm:max-w-lg">
-                              {/* O conteúdo do Dialog será preenchido quando o DialogTrigger for clicado */}
-                            </DialogContent>
-                          </Dialog>
-                          <Button 
-                            variant="ghost" 
-                            size="icon"
-                            onClick={() => handleDeleteUser(usuario.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            <span className="sr-only">Excluir</span>
-                          </Button>
-                        </div>
+                </TableHeader>
+                <TableBody>
+                  {filteredUsers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
+                        Nenhum usuário encontrado
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  ) : (
+                    filteredUsers.map((usuario) => (
+                      <TableRow key={usuario.id}>
+                        <TableCell className="font-medium">{usuario.perfil.nome}</TableCell>
+                        <TableCell>{usuario.email}</TableCell>
+                        <TableCell>
+                          {usuario.perfil.tipo_usuario === "admin" ? "Administrador" : "Usuário Normal"}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            {usuario.empresas.map((emp) => (
+                              <span key={emp.id} className="text-sm">
+                                {emp.nome}
+                              </span>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => handleEditUser(usuario)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                              <span className="sr-only">Editar</span>
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => handleDeleteUser(usuario.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span className="sr-only">Excluir</span>
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Modal para adicionar/editar usuário */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {isAddingUser ? "Adicionar Novo Usuário" : "Editar Usuário"}
+            </DialogTitle>
+            <DialogDescription>
+              Preencha os campos para {isAddingUser ? "adicionar um novo usuário" : "atualizar os dados do usuário"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="nome" className="text-right">
+                Nome
+              </Label>
+              <Input
+                id="nome"
+                value={formData.nome}
+                onChange={(e) => setFormData({...formData, nome: e.target.value})}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="email" className="text-right">
+                Email
+              </Label>
+              <Input
+                id="email"
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({...formData, email: e.target.value})}
+                className="col-span-3"
+                disabled={!isAddingUser}
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="senha" className="text-right">
+                Senha
+              </Label>
+              <Input
+                id="senha"
+                type="password"
+                placeholder={isAddingUser ? "" : "Deixe em branco para manter a mesma"}
+                value={formData.senha}
+                onChange={(e) => setFormData({...formData, senha: e.target.value})}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="tipoUsuario" className="text-right">
+                Tipo de Usuário
+              </Label>
+              <Select
+                value={formData.tipoUsuario}
+                onValueChange={(value) => setFormData({...formData, tipoUsuario: value as "admin" | "normal"})}
+              >
+                <SelectTrigger className="col-span-3">
+                  <SelectValue placeholder="Selecione um tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Administrador</SelectItem>
+                  <SelectItem value="normal">Usuário Normal</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-4 gap-4">
+              <Label className="text-right pt-2">Empresas Vinculadas</Label>
+              <div className="col-span-3 space-y-2">
+                {empresas.map((empresa) => (
+                  <div key={empresa.id} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`empresa-${empresa.id}`}
+                      checked={formData.empresasVinculadas.includes(empresa.id)}
+                      onCheckedChange={() => toggleEmpresa(empresa.id)}
+                    />
+                    <Label htmlFor={`empresa-${empresa.id}`}>
+                      {empresa.nome} <span className="text-xs text-muted-foreground">({empresa.cnpj})</span>
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveUser} disabled={isLoading}>
+              {isLoading ? "Salvando..." : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

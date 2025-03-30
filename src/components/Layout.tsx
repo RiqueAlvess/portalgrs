@@ -13,23 +13,22 @@ import {
   LogOut,
   Menu,
   X,
-  Settings
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Layout = () => {
-  const { user, logout, mudarEmpresa } = useAuth();
+  const { perfil, empresas, empresaAtual, logout, mudarEmpresa } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate("/login");
   };
 
   const handleEmpresaChange = (empresaId: string) => {
-    const empresa = user?.empresas.find(emp => emp.id === empresaId);
+    const empresa = empresas.find(emp => emp.id === empresaId);
     if (empresa) {
       mudarEmpresa(empresa);
     }
@@ -43,7 +42,7 @@ const Layout = () => {
   ];
 
   // Adicionar item de navegação para usuários admin
-  if (user?.tipoUsuario === "admin") {
+  if (perfil?.tipo_usuario === "admin") {
     navigation.push({ name: "Usuários", path: "/users", icon: <Users className="h-5 w-5" /> });
   }
 
@@ -99,14 +98,14 @@ const Layout = () => {
               <div className="px-4">
                 <p className="text-xs text-gray-200 mb-1">Empresa Atual</p>
                 <Select 
-                  value={user?.empresaAtual?.id} 
+                  value={empresaAtual?.id} 
                   onValueChange={handleEmpresaChange}
                 >
                   <SelectTrigger className="w-full bg-sidebar-accent text-white border-none">
                     <SelectValue placeholder="Selecione uma empresa" />
                   </SelectTrigger>
                   <SelectContent>
-                    {user?.empresas.map((empresa) => (
+                    {empresas.map((empresa) => (
                       <SelectItem key={empresa.id} value={empresa.id}>
                         {empresa.nome}
                       </SelectItem>
@@ -118,8 +117,8 @@ const Layout = () => {
               {/* Card do usuário */}
               <Card className="p-4 bg-sidebar-accent border-none">
                 <div className="flex flex-col">
-                  <span className="text-sm font-medium text-white">{user?.nome}</span>
-                  <span className="text-xs text-gray-200">{user?.email}</span>
+                  <span className="text-sm font-medium text-white">{perfil?.nome}</span>
+                  <span className="text-xs text-gray-200">{perfil?.tipo_usuario === 'admin' ? 'Administrador' : 'Usuário'}</span>
                   <div className="flex items-center mt-2">
                     <Button
                       variant="ghost"

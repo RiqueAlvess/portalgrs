@@ -9,7 +9,80 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      empresas: {
+        Row: {
+          cnpj: string
+          created_at: string
+          id: string
+          nome: string
+          updated_at: string
+        }
+        Insert: {
+          cnpj: string
+          created_at?: string
+          id?: string
+          nome: string
+          updated_at?: string
+        }
+        Update: {
+          cnpj?: string
+          created_at?: string
+          id?: string
+          nome?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      perfis: {
+        Row: {
+          created_at: string
+          id: string
+          nome: string
+          tipo_usuario: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          nome: string
+          tipo_usuario: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          nome?: string
+          tipo_usuario?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      usuario_empresas: {
+        Row: {
+          empresa_id: string
+          id: string
+          usuario_id: string
+        }
+        Insert: {
+          empresa_id: string
+          id?: string
+          usuario_id: string
+        }
+        Update: {
+          empresa_id?: string
+          id?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usuario_empresas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

@@ -5,14 +5,14 @@ import { Users, AlertCircle, Calendar, FileText, Building } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 const Dashboard = () => {
-  const { user } = useAuth();
+  const { perfil, empresaAtual } = useAuth();
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground">
-          Bem-vindo, {user?.nome}! Aqui está uma visão geral do gerenciamento de saúde ocupacional.
+          Bem-vindo, {perfil?.nome}! Aqui está uma visão geral do gerenciamento de saúde ocupacional.
         </p>
       </div>
 
@@ -20,7 +20,7 @@ const Dashboard = () => {
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>Empresa Atual Selecionada</AlertTitle>
         <AlertDescription className="flex items-center gap-2">
-          <Building className="h-4 w-4" /> {user?.empresaAtual?.nome || "Nenhuma empresa selecionada"}
+          <Building className="h-4 w-4" /> {empresaAtual?.nome || "Nenhuma empresa selecionada"}
         </AlertDescription>
       </Alert>
 

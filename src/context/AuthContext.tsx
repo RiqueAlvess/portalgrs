@@ -1,6 +1,8 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { Session, User } from "@supabase/supabase-js";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Empresa {
   id: string;
@@ -8,21 +10,21 @@ interface Empresa {
   cnpj: string;
 }
 
-interface User {
+interface PerfilUsuario {
   id: string;
   nome: string;
-  email: string;
-  tipoUsuario: "admin" | "normal";
-  empresas: Empresa[];
-  empresaAtual?: Empresa;
+  tipo_usuario: "admin" | "normal";
 }
 
 interface AuthContextType {
   user: User | null;
+  perfil: PerfilUsuario | null;
+  empresas: Empresa[];
+  empresaAtual: Empresa | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  logout: () => Promise<void>;
   mudarEmpresa: (empresa: Empresa) => void;
 }
 
@@ -30,65 +32,156 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [perfil, setPerfil] = useState<PerfilUsuario | null>(null);
+  const [empresas, setEmpresas] = useState<Empresa[]>([]);
+  const [empresaAtual, setEmpresaAtual] = useState<Empresa | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    // Verificar dados do usuário armazenados no carregamento do componente
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
+  // Buscar perfil do usuário
+  const fetchPerfil = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("perfis")
+        .select("*")
+        .eq("id", userId)
+        .single();
+
+      if (error) {
+        console.error("Erro ao buscar perfil:", error);
+        return;
+      }
+
+      if (data) {
+        setPerfil({
+          id: data.id,
+          nome: data.nome,
+          tipo_usuario: data.tipo_usuario as "admin" | "normal",
+        });
+      }
+    } catch (error) {
+      console.error("Erro ao buscar perfil:", error);
     }
-    setIsLoading(false);
+  };
+
+  // Buscar empresas do usuário
+  const fetchEmpresas = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("usuario_empresas")
+        .select(`
+          empresa_id,
+          empresas:empresa_id(
+            id,
+            nome,
+            cnpj
+          )
+        `)
+        .eq("usuario_id", userId);
+
+      if (error) {
+        console.error("Erro ao buscar empresas:", error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        const empresasData = data.map(item => ({
+          id: item.empresas.id,
+          nome: item.empresas.nome,
+          cnpj: item.empresas.cnpj
+        }));
+        
+        setEmpresas(empresasData);
+        
+        // Se não houver empresa atual, definir a primeira como atual
+        if (!empresaAtual && empresasData.length > 0) {
+          setEmpresaAtual(empresasData[0]);
+          localStorage.setItem("empresaAtual", JSON.stringify(empresasData[0]));
+        }
+      }
+    } catch (error) {
+      console.error("Erro ao buscar empresas:", error);
+    }
+  };
+
+  // Efeito para carregar sessão do usuário
+  useEffect(() => {
+    // Verificar sessão existente no carregamento
+    const loadSession = async () => {
+      setIsLoading(true);
+      
+      try {
+        // Configurar listener para mudanças na autenticação
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+          (event, currentSession) => {
+            setSession(currentSession);
+            setUser(currentSession?.user ?? null);
+            
+            if (currentSession?.user) {
+              // Usar setTimeout para evitar problemas de lock com Supabase
+              setTimeout(() => {
+                fetchPerfil(currentSession.user.id);
+                fetchEmpresas(currentSession.user.id);
+              }, 0);
+            } else {
+              setPerfil(null);
+              setEmpresas([]);
+              setEmpresaAtual(null);
+            }
+          }
+        );
+        
+        // Verificar se já existe uma sessão
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
+        
+        if (currentSession?.user) {
+          await fetchPerfil(currentSession.user.id);
+          await fetchEmpresas(currentSession.user.id);
+          
+          // Verificar se há empresa atual no localStorage
+          const storedEmpresa = localStorage.getItem("empresaAtual");
+          if (storedEmpresa) {
+            setEmpresaAtual(JSON.parse(storedEmpresa));
+          }
+        }
+      } catch (error) {
+        console.error("Erro ao carregar sessão:", error);
+      } finally {
+        setIsLoading(false);
+      }
+      
+      return () => {
+        // Limpar subscription ao desmontar
+        subscription?.unsubscribe();
+      };
+    };
+    
+    loadSession();
   }, []);
 
+  // Login com Supabase
   const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true);
     try {
-      // Em uma aplicação real, isso seria uma chamada de API
-      // Lógica de login simulada para demonstração
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      if (email === "admin@exemplo.com" && password === "senha") {
-        const empresas = [
-          { id: "123", nome: "Empresa Principal Ltda", cnpj: "12.345.678/0001-90" },
-          { id: "456", nome: "Filial Sul S.A.", cnpj: "98.765.432/0001-10" },
-          { id: "789", nome: "Unidade Norte ME", cnpj: "11.222.333/0001-44" },
-        ];
-        
-        const userData: User = {
-          id: "1",
-          nome: "Administrador",
-          email: "admin@exemplo.com",
-          tipoUsuario: "admin",
-          empresas: empresas,
-          empresaAtual: empresas[0]
-        };
-        setUser(userData);
-        localStorage.setItem("user", JSON.stringify(userData));
-        toast.success("Login realizado com sucesso");
-        return true;
-      } else if (email === "usuario@exemplo.com" && password === "senha") {
-        const empresas = [
-          { id: "123", nome: "Empresa Principal Ltda", cnpj: "12.345.678/0001-90" },
-          { id: "456", nome: "Filial Sul S.A.", cnpj: "98.765.432/0001-10" },
-        ];
-        
-        const userData: User = {
-          id: "2",
-          nome: "Usuário Regular",
-          email: "usuario@exemplo.com",
-          tipoUsuario: "normal",
-          empresas: empresas,
-          empresaAtual: empresas[0]
-        };
-        setUser(userData);
-        localStorage.setItem("user", JSON.stringify(userData));
-        toast.success("Login realizado com sucesso");
-        return true;
-      } else {
-        toast.error("Credenciais inválidas");
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        console.error("Erro de login:", error);
+        toast.error(error.message || "Falha no login. Por favor, tente novamente.");
         return false;
       }
+
+      if (data.user) {
+        toast.success("Login realizado com sucesso");
+        return true;
+      }
+
+      return false;
     } catch (error) {
       console.error("Erro de login:", error);
       toast.error("Falha no login. Por favor, tente novamente.");
@@ -98,23 +191,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem("user");
-    toast.info("Você foi desconectado");
-  };
-
-  const mudarEmpresa = (empresa: Empresa) => {
-    if (user) {
-      const updatedUser = { ...user, empresaAtual: empresa };
-      setUser(updatedUser);
-      localStorage.setItem("user", JSON.stringify(updatedUser));
-      toast.success(`Empresa alterada para: ${empresa.nome}`);
+  // Logout com Supabase
+  const logout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setPerfil(null);
+      setEmpresas([]);
+      setEmpresaAtual(null);
+      localStorage.removeItem("empresaAtual");
+      toast.info("Você foi desconectado");
+    } catch (error) {
+      console.error("Erro ao fazer logout:", error);
+      toast.error("Erro ao desconectar. Tente novamente.");
     }
   };
 
+  // Mudar empresa atual
+  const mudarEmpresa = (empresa: Empresa) => {
+    setEmpresaAtual(empresa);
+    localStorage.setItem("empresaAtual", JSON.stringify(empresa));
+    toast.success(`Empresa alterada para: ${empresa.nome}`);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, logout, mudarEmpresa }}>
+    <AuthContext.Provider 
+      value={{ 
+        user, 
+        perfil, 
+        empresas, 
+        empresaAtual, 
+        isAuthenticated: !!user, 
+        isLoading, 
+        login, 
+        logout, 
+        mudarEmpresa 
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

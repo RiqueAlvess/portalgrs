@@ -6,13 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Building, MailIcon, KeyIcon } from "lucide-react";
+import { Building } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Login = () => {
-  const [email, setEmail] = useState("admin@exemplo.com");
-  const [password, setPassword] = useState("senha123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loginError, setLoginError] = useState("");
   const { login, isAuthenticated } = useAuth();
@@ -36,7 +36,7 @@ const Login = () => {
     setIsSubmitting(true);
     
     try {
-      console.log("Tentando login com:", { email, password });
+      console.log("Tentando login com:", { email });
       const success = await login(email, password);
       
       if (success) {
@@ -81,19 +81,6 @@ const Login = () => {
                   <AlertDescription>{loginError}</AlertDescription>
                 </Alert>
               )}
-              
-              <Card className="bg-blue-50 border-blue-200 p-4">
-                <p className="text-sm text-blue-700 font-medium mb-2">Para testes, use estas credenciais:</p>
-                <div className="flex items-center mt-1 text-sm text-blue-600">
-                  <MailIcon className="h-4 w-4 mr-1" /> admin@exemplo.com
-                </div>
-                <div className="flex items-center mt-1 text-sm text-blue-600">
-                  <KeyIcon className="h-4 w-4 mr-1" /> senha123
-                </div>
-                <p className="text-xs text-blue-500 mt-2">
-                  Nota: Se essas credenciais não funcionarem, tente criar uma conta no Supabase Auth.
-                </p>
-              </Card>
               
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>

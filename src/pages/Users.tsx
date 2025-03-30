@@ -18,7 +18,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { 
   Select, 
@@ -90,24 +89,40 @@ const Users = () => {
           setEmpresas(empresasData);
         }
 
-        // Buscar usuários com perfis e empresas vinculadas
+        // Buscar usuários com seus emails
+        const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
+        
+        if (authError) {
+          console.error("Erro ao carregar usuários:", authError);
+          toast.error("Erro ao carregar usuários");
+          return;
+        }
+        
+        // Mapear usuários auth para um objeto com id -> email
+        const usersEmailMap: Record<string, string> = {};
+        if (authUsers?.users) {
+          authUsers.users.forEach(user => {
+            usersEmailMap[user.id] = user.email || '';
+          });
+        }
+
+        // Buscar perfis
         const { data: perfilsData, error: perfilsError } = await supabase
           .from("perfis")
           .select(`
             id,
             nome,
-            tipo_usuario,
-            user:id(email)
+            tipo_usuario
           `);
 
         if (perfilsError) {
-          console.error("Erro ao carregar usuários:", perfilsError);
-          toast.error("Erro ao carregar usuários");
+          console.error("Erro ao carregar perfis:", perfilsError);
+          toast.error("Erro ao carregar perfis");
           return;
         }
 
         if (perfilsData) {
-          // Para cada usuário, buscar suas empresas vinculadas
+          // Para cada perfil, buscar suas empresas vinculadas
           const usuariosCompletos = await Promise.all(
             perfilsData.map(async (perfil) => {
               // Buscar empresas vinculadas ao usuário
@@ -123,7 +138,7 @@ const Users = () => {
                 console.error("Erro ao carregar empresas do usuário:", vinculacoesError);
                 return {
                   id: perfil.id,
-                  email: perfil.user?.email || "",
+                  email: usersEmailMap[perfil.id] || "Email não encontrado",
                   perfil: {
                     nome: perfil.nome,
                     tipo_usuario: perfil.tipo_usuario as "admin" | "normal"
@@ -141,7 +156,7 @@ const Users = () => {
 
               return {
                 id: perfil.id,
-                email: perfil.user?.email || "",
+                email: usersEmailMap[perfil.id] || "Email não encontrado",
                 perfil: {
                   nome: perfil.nome,
                   tipo_usuario: perfil.tipo_usuario as "admin" | "normal"

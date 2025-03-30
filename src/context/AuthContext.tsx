@@ -146,19 +146,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setEmpresaAtual(JSON.parse(storedEmpresa));
           }
         }
+        
+        // Adicionar cleanup para o subscription
+        return () => {
+          subscription?.unsubscribe();
+        };
       } catch (error) {
         console.error("Erro ao carregar sessão:", error);
       } finally {
         setIsLoading(false);
       }
-      
-      return () => {
-        // Limpar subscription ao desmontar
-        subscription?.unsubscribe();
-      };
     };
     
-    loadSession();
+    // Executar loadSession e capturar a função de limpeza
+    const cleanup = loadSession();
+    
+    // Retornar função de limpeza para o useEffect
+    return () => {
+      // Usar uma IIFE async para chamar o cleanup de forma segura
+      (async () => {
+        if (cleanup) {
+          try {
+            // Esperar pela função de limpeza (se for uma Promise)
+            await cleanup;
+          } catch (error) {
+            console.error("Erro no cleanup:", error);
+          }
+        }
+      })();
+    };
   }, []);
 
   // Login com Supabase

@@ -188,7 +188,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error("Erro de login:", error);
-        toast.error(error.message || "Falha no login. Por favor, tente novamente.");
+        
+        // Mensagens de erro mais específicas
+        if (error.message.includes("Invalid login credentials")) {
+          toast.error("Credenciais inválidas. Verifique seu email e senha.");
+        } else {
+          toast.error(error.message || "Falha no login. Por favor, tente novamente.");
+        }
+        
         return false;
       }
 

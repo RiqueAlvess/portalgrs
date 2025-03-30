@@ -8,11 +8,13 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Label } from "@/components/ui/label";
 import { Building } from "lucide-react";
 import { toast } from "sonner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loginError, setLoginError] = useState("");
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
@@ -24,6 +26,7 @@ const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoginError("");
     
     if (!email || !password) {
       toast.error("Por favor, preencha todos os campos");
@@ -36,7 +39,12 @@ const Login = () => {
       const success = await login(email, password);
       if (success) {
         navigate("/");
+      } else {
+        setLoginError("Credenciais inválidas. Verifique seu email e senha.");
       }
+    } catch (error) {
+      console.error("Erro de login:", error);
+      setLoginError("Ocorreu um erro ao tentar fazer login. Por favor, tente novamente.");
     } finally {
       setIsSubmitting(false);
     }
@@ -59,6 +67,11 @@ const Login = () => {
           </CardHeader>
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
+              {loginError && (
+                <Alert variant="destructive" className="text-sm bg-red-50 text-red-500 border-red-200">
+                  <AlertDescription>{loginError}</AlertDescription>
+                </Alert>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -82,7 +95,7 @@ const Login = () => {
                 />
               </div>
             </CardContent>
-            <CardFooter>
+            <CardFooter className="flex flex-col gap-4">
               <Button
                 type="submit"
                 className="w-full bg-sidebar-accent hover:bg-sidebar-accent/90"
@@ -90,13 +103,12 @@ const Login = () => {
               >
                 {isSubmitting ? "Entrando..." : "Entrar"}
               </Button>
+              <div className="text-gray-500 text-sm text-center px-4">
+                <p>Para acesso ao sistema, entre em contato com o administrador.</p>
+                <p className="mt-2 text-xs">Credenciais de teste: programador@grsnucleo.com.br / @Grs2025@</p>
+              </div>
             </CardFooter>
           </form>
-          <div className="p-4 text-center text-sm">
-            <div className="text-gray-500 mt-2">
-              <p>Para acesso ao sistema, entre em contato com o administrador.</p>
-            </div>
-          </div>
         </Card>
       </div>
     </div>

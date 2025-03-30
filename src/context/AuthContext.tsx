@@ -41,6 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Buscar perfil do usuário
   const fetchPerfil = async (userId: string) => {
     try {
+      console.log("Buscando perfil para userId:", userId);
       const { data, error } = await supabase
         .from("perfis")
         .select("*")
@@ -53,11 +54,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data) {
+        console.log("Perfil encontrado:", data);
         setPerfil({
           id: data.id,
           nome: data.nome,
           tipo_usuario: data.tipo_usuario as "admin" | "normal",
         });
+      } else {
+        console.log("Nenhum perfil encontrado para este usuário");
       }
     } catch (error) {
       console.error("Erro ao buscar perfil:", error);
@@ -67,6 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Buscar empresas do usuário
   const fetchEmpresas = async (userId: string) => {
     try {
+      console.log("Buscando empresas para userId:", userId);
       const { data, error } = await supabase
         .from("usuario_empresas")
         .select(`
@@ -91,6 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           cnpj: item.empresas.cnpj
         }));
         
+        console.log("Empresas encontradas:", empresasData);
         setEmpresas(empresasData);
         
         // Se não houver empresa atual, definir a primeira como atual
@@ -98,6 +104,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setEmpresaAtual(empresasData[0]);
           localStorage.setItem("empresaAtual", JSON.stringify(empresasData[0]));
         }
+      } else {
+        console.log("Nenhuma empresa encontrada para este usuário");
       }
     } catch (error) {
       console.error("Erro ao buscar empresas:", error);
@@ -111,19 +119,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(true);
       
       try {
+        console.log("Inicializando verificação de autenticação");
+        
         // Configurar listener para mudanças na autenticação
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           (event, currentSession) => {
+            console.log("Evento de auth state change:", event);
             setSession(currentSession);
             setUser(currentSession?.user ?? null);
             
             if (currentSession?.user) {
+              console.log("Usuário autenticado:", currentSession.user.email);
               // Usar setTimeout para evitar problemas de lock com Supabase
               setTimeout(() => {
                 fetchPerfil(currentSession.user.id);
                 fetchEmpresas(currentSession.user.id);
               }, 0);
             } else {
+              console.log("Sem usuário autenticado");
               setPerfil(null);
               setEmpresas([]);
               setEmpresaAtual(null);
@@ -133,6 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         // Verificar se já existe uma sessão
         const { data: { session: currentSession } } = await supabase.auth.getSession();
+        console.log("Sessão atual:", currentSession ? "Existe" : "Não existe");
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
         
@@ -181,6 +195,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true);
     try {
+      console.log(`Tentando login com email: ${email}`);
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -196,19 +212,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           toast.error(error.message || "Falha no login. Por favor, tente novamente.");
         }
         
-        return false;
+        throw error; // Lançar erro para ser capturado pelo componente Login
       }
 
       if (data.user) {
+        console.log("Login bem-sucedido:", data.user.email);
         toast.success("Login realizado com sucesso");
         return true;
       }
 
+      console.log("Login falhou mas não retornou erro");
       return false;
     } catch (error) {
       console.error("Erro de login:", error);
-      toast.error("Falha no login. Por favor, tente novamente.");
-      return false;
+      // Não mostrar toast aqui, deixar o componente Login tratar o erro
+      throw error; // Relançar o erro para o componente Login
     } finally {
       setIsLoading(false);
     }

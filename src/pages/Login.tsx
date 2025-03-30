@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,8 @@ import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Login = () => {
-  const [email, setEmail] = useState("programador@grsnucleo.com.br");
-  const [password, setPassword] = useState("@Grs2025@");
+  const [email, setEmail] = useState("admin@exemplo.com");
+  const [password, setPassword] = useState("senha123");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loginError, setLoginError] = useState("");
   const { login, isAuthenticated } = useAuth();
@@ -36,15 +36,24 @@ const Login = () => {
     setIsSubmitting(true);
     
     try {
+      console.log("Tentando login com:", { email, password });
       const success = await login(email, password);
+      
       if (success) {
         navigate("/");
       } else {
+        console.log("Login falhou mas não lançou erro");
         setLoginError("Credenciais inválidas. Verifique seu email e senha.");
       }
-    } catch (error) {
-      console.error("Erro de login:", error);
-      setLoginError("Ocorreu um erro ao tentar fazer login. Por favor, tente novamente.");
+    } catch (error: any) {
+      console.error("Erro detalhado de login:", error);
+      
+      // Exibir mensagem mais específica baseada no erro
+      if (error?.message?.includes("Invalid login credentials")) {
+        setLoginError("Credenciais inválidas. O email ou senha estão incorretos.");
+      } else {
+        setLoginError(`Erro: ${error?.message || "Ocorreu um problema ao tentar fazer login"}`);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -73,14 +82,17 @@ const Login = () => {
                 </Alert>
               )}
               
-              <Card className="bg-blue-50 border-blue-200 p-3">
-                <p className="text-sm text-blue-700 font-medium">Credenciais de teste</p>
+              <Card className="bg-blue-50 border-blue-200 p-4">
+                <p className="text-sm text-blue-700 font-medium mb-2">Para testes, use estas credenciais:</p>
                 <div className="flex items-center mt-1 text-sm text-blue-600">
-                  <MailIcon className="h-4 w-4 mr-1" /> programador@grsnucleo.com.br
+                  <MailIcon className="h-4 w-4 mr-1" /> admin@exemplo.com
                 </div>
                 <div className="flex items-center mt-1 text-sm text-blue-600">
-                  <KeyIcon className="h-4 w-4 mr-1" /> @Grs2025@
+                  <KeyIcon className="h-4 w-4 mr-1" /> senha123
                 </div>
+                <p className="text-xs text-blue-500 mt-2">
+                  Nota: Se essas credenciais não funcionarem, tente criar uma conta no Supabase Auth.
+                </p>
               </Card>
               
               <div className="space-y-2">

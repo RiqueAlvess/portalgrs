@@ -7,9 +7,9 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Dashboard from "./pages/Dashboard";
-import Employees from "./pages/Employees";
+import Funcionarios from "./pages/Employees";
 import Absenteeism from "./pages/Absenteeism";
-import MedicalExams from "./pages/MedicalExams";
+import ExamesMedicos from "./pages/MedicalExams";
 import Users from "./pages/Users";
 import Login from "./pages/Login";
 import Layout from "./components/Layout";
@@ -27,9 +27,9 @@ const App = () => (
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<Dashboard />} />
-            <Route path="employees" element={<Employees />} />
+            <Route path="employees" element={<Funcionarios />} />
             <Route path="absenteeism" element={<Absenteeism />} />
-            <Route path="medical-exams" element={<MedicalExams />} />
+            <Route path="medical-exams" element={<ExamesMedicos />} />
             <Route path="users" element={<Users />} />
           </Route>
           <Route path="*" element={<NotFound />} />

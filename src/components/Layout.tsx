@@ -34,6 +34,7 @@ const Layout = () => {
     }
   };
 
+  // Navegação padrão disponível para todos os usuários
   const navigation = [
     { name: "Dashboard", path: "/", icon: <LayoutDashboard className="h-5 w-5" /> },
     { name: "Funcionários", path: "/employees", icon: <Users className="h-5 w-5" /> },

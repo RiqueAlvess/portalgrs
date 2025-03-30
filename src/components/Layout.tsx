@@ -12,11 +12,13 @@ import {
   Building,
   LogOut,
   Menu,
-  X
+  X,
+  Settings
 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Layout = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, mudarEmpresa } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -26,16 +28,28 @@ const Layout = () => {
     navigate("/login");
   };
 
+  const handleEmpresaChange = (empresaId: string) => {
+    const empresa = user?.empresas.find(emp => emp.id === empresaId);
+    if (empresa) {
+      mudarEmpresa(empresa);
+    }
+  };
+
   const navigation = [
     { name: "Dashboard", path: "/", icon: <LayoutDashboard className="h-5 w-5" /> },
-    { name: "Employees", path: "/employees", icon: <Users className="h-5 w-5" /> },
-    { name: "Absenteeism", path: "/absenteeism", icon: <Calendar className="h-5 w-5" /> },
-    { name: "Medical Exams", path: "/medical-exams", icon: <FileText className="h-5 w-5" /> },
+    { name: "Funcionários", path: "/employees", icon: <Users className="h-5 w-5" /> },
+    { name: "Absenteísmo", path: "/absenteeism", icon: <Calendar className="h-5 w-5" /> },
+    { name: "Exames Médicos", path: "/medical-exams", icon: <FileText className="h-5 w-5" /> },
   ];
+
+  // Adicionar item de navegação para usuários admin
+  if (user?.tipoUsuario === "admin") {
+    navigation.push({ name: "Usuários", path: "/users", icon: <Users className="h-5 w-5" /> });
+  }
 
   return (
     <div className="flex h-screen bg-gray-100">
-      {/* Mobile menu button */}
+      {/* Botão do menu mobile */}
       <div className="fixed top-0 left-0 z-40 p-4 md:hidden">
         <Button
           variant="outline"
@@ -47,7 +61,7 @@ const Layout = () => {
         </Button>
       </div>
 
-      {/* Sidebar - Desktop always visible, mobile conditionally */}
+      {/* Sidebar - Desktop sempre visível, mobile condicional */}
       <div
         className={`fixed inset-y-0 left-0 z-30 w-64 transform bg-sidebar transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${
           isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
@@ -80,10 +94,31 @@ const Layout = () => {
               ))}
             </div>
 
-            <div className="px-4 mb-6">
+            <div className="px-4 space-y-4 mb-6">
+              {/* Seletor de Empresa */}
+              <div className="px-4">
+                <p className="text-xs text-gray-200 mb-1">Empresa Atual</p>
+                <Select 
+                  value={user?.empresaAtual?.id} 
+                  onValueChange={handleEmpresaChange}
+                >
+                  <SelectTrigger className="w-full bg-sidebar-accent text-white border-none">
+                    <SelectValue placeholder="Selecione uma empresa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {user?.empresas.map((empresa) => (
+                      <SelectItem key={empresa.id} value={empresa.id}>
+                        {empresa.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Card do usuário */}
               <Card className="p-4 bg-sidebar-accent border-none">
                 <div className="flex flex-col">
-                  <span className="text-sm font-medium text-white">{user?.name}</span>
+                  <span className="text-sm font-medium text-white">{user?.nome}</span>
                   <span className="text-xs text-gray-200">{user?.email}</span>
                   <div className="flex items-center mt-2">
                     <Button
@@ -93,7 +128,7 @@ const Layout = () => {
                       onClick={handleLogout}
                     >
                       <LogOut className="h-4 w-4 mr-2" />
-                      Logout
+                      Sair
                     </Button>
                   </div>
                 </div>
@@ -103,14 +138,14 @@ const Layout = () => {
         </div>
       </div>
 
-      {/* Main content */}
+      {/* Conteúdo principal */}
       <div className="flex-1 overflow-auto">
         <main className="p-4 md:p-8">
           <Outlet />
         </main>
       </div>
 
-      {/* Backdrop for mobile - closes menu when clicked */}
+      {/* Backdrop para mobile - fecha o menu quando clicado */}
       {isMobileMenuOpen && (
         <div
           className="fixed inset-0 z-20 bg-black bg-opacity-50 md:hidden"

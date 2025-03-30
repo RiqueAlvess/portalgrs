@@ -2,12 +2,19 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { toast } from "sonner";
 
+interface Empresa {
+  id: string;
+  nome: string;
+  cnpj: string;
+}
+
 interface User {
   id: string;
-  name: string;
+  nome: string;
   email: string;
-  userType: "admin" | "normal";
-  companyId?: string;
+  tipoUsuario: "admin" | "normal";
+  empresas: Empresa[];
+  empresaAtual?: Empresa;
 }
 
 interface AuthContextType {
@@ -16,6 +23,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
+  mudarEmpresa: (empresa: Empresa) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -25,7 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for stored user data on component mount
+    // Verificar dados do usuário armazenados no carregamento do componente
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
       setUser(JSON.parse(storedUser));
@@ -36,41 +44,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true);
     try {
-      // In a real app, this would be an API call
-      // Mock login logic for demonstration
+      // Em uma aplicação real, isso seria uma chamada de API
+      // Lógica de login simulada para demonstração
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      if (email === "admin@example.com" && password === "password") {
+      if (email === "admin@exemplo.com" && password === "senha") {
+        const empresas = [
+          { id: "123", nome: "Empresa Principal Ltda", cnpj: "12.345.678/0001-90" },
+          { id: "456", nome: "Filial Sul S.A.", cnpj: "98.765.432/0001-10" },
+          { id: "789", nome: "Unidade Norte ME", cnpj: "11.222.333/0001-44" },
+        ];
+        
         const userData: User = {
           id: "1",
-          name: "Administrator",
-          email: "admin@example.com",
-          userType: "admin",
-          companyId: "123"
+          nome: "Administrador",
+          email: "admin@exemplo.com",
+          tipoUsuario: "admin",
+          empresas: empresas,
+          empresaAtual: empresas[0]
         };
         setUser(userData);
         localStorage.setItem("user", JSON.stringify(userData));
-        toast.success("Login successful");
+        toast.success("Login realizado com sucesso");
         return true;
-      } else if (email === "user@example.com" && password === "password") {
+      } else if (email === "usuario@exemplo.com" && password === "senha") {
+        const empresas = [
+          { id: "123", nome: "Empresa Principal Ltda", cnpj: "12.345.678/0001-90" },
+          { id: "456", nome: "Filial Sul S.A.", cnpj: "98.765.432/0001-10" },
+        ];
+        
         const userData: User = {
           id: "2",
-          name: "Regular User",
-          email: "user@example.com",
-          userType: "normal",
-          companyId: "123"
+          nome: "Usuário Regular",
+          email: "usuario@exemplo.com",
+          tipoUsuario: "normal",
+          empresas: empresas,
+          empresaAtual: empresas[0]
         };
         setUser(userData);
         localStorage.setItem("user", JSON.stringify(userData));
-        toast.success("Login successful");
+        toast.success("Login realizado com sucesso");
         return true;
       } else {
-        toast.error("Invalid credentials");
+        toast.error("Credenciais inválidas");
         return false;
       }
     } catch (error) {
-      console.error("Login error:", error);
-      toast.error("Login failed. Please try again.");
+      console.error("Erro de login:", error);
+      toast.error("Falha no login. Por favor, tente novamente.");
       return false;
     } finally {
       setIsLoading(false);
@@ -80,11 +101,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = () => {
     setUser(null);
     localStorage.removeItem("user");
-    toast.info("You have been logged out");
+    toast.info("Você foi desconectado");
+  };
+
+  const mudarEmpresa = (empresa: Empresa) => {
+    if (user) {
+      const updatedUser = { ...user, empresaAtual: empresa };
+      setUser(updatedUser);
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+      toast.success(`Empresa alterada para: ${empresa.nome}`);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, logout, mudarEmpresa }}>
       {children}
     </AuthContext.Provider>
   );
@@ -93,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    throw new Error("useAuth deve ser usado dentro de um AuthProvider");
   }
   return context;
 }

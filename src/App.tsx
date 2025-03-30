@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Employees from "./pages/Employees";
 import Absenteeism from "./pages/Absenteeism";
 import MedicalExams from "./pages/MedicalExams";
+import Users from "./pages/Users";
 import Login from "./pages/Login";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -29,6 +30,7 @@ const App = () => (
             <Route path="employees" element={<Employees />} />
             <Route path="absenteeism" element={<Absenteeism />} />
             <Route path="medical-exams" element={<MedicalExams />} />
+            <Route path="users" element={<Users />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

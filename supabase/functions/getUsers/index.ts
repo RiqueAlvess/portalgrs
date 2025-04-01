@@ -17,14 +17,17 @@ serve(async (req) => {
   }
 
   try {
-    // Create Supabase client with admin privileges
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    console.log("getUsers function called");
 
+    // Create Supabase client with admin privileges
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
     if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error("As variáveis de ambiente SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY são necessárias");
+      throw new Error("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set");
     }
+    
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Verify authorization
     const authHeader = req.headers.get("Authorization");
@@ -32,15 +35,25 @@ serve(async (req) => {
       throw new Error("Autorização necessária");
     }
 
+    console.log("Authorization header found, verifying token");
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
-    if (authError || !user) {
+    if (authError) {
+      console.error("Auth error:", authError);
       throw new Error("Usuário não autenticado");
     }
+    
+    if (!user) {
+      throw new Error("Usuário não encontrado");
+    }
+
+    console.log("User authenticated:", user.id);
 
     // Verificar se o usuário é admin
     const isAdmin = user.user_metadata?.tipo_usuario === "admin";
+    console.log("User admin status from metadata:", isAdmin);
+    
     if (!isAdmin) {
       // Verificar na tabela de perfis como fallback
       const { data: perfilData, error: perfilError } = await supabase
@@ -49,17 +62,23 @@ serve(async (req) => {
         .eq("id", user.id)
         .single();
 
+      console.log("Perfil data:", perfilData, "Perfil error:", perfilError);
+
       if (perfilError || perfilData?.tipo_usuario !== "admin") {
         throw new Error("Permissão negada: apenas administradores podem listar usuários");
       }
     }
 
     // List users
+    console.log("Listing users...");
     const { data: listUsersData, error: listUsersError } = await supabase.auth.admin.listUsers();
 
     if (listUsersError) {
+      console.error("Error listing users:", listUsersError);
       throw new Error(`Erro ao listar usuários: ${listUsersError.message}`);
     }
+
+    console.log("Successfully listed users, count:", listUsersData.users.length);
 
     // Return users data
     return new Response(
@@ -76,7 +95,7 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error("Erro na função getUsers:", error);
+    console.error("Error in getUsers function:", error);
     return new Response(
       JSON.stringify({
         success: false,

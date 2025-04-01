@@ -17,14 +17,17 @@ serve(async (req) => {
   }
 
   try {
-    // Create Supabase client with admin privileges
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    console.log("manageUser function called");
 
+    // Create Supabase client with admin privileges
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
     if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error("As variáveis de ambiente SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY são necessárias");
+      throw new Error("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set");
     }
+    
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Verify authorization
     const authHeader = req.headers.get("Authorization");
@@ -32,15 +35,25 @@ serve(async (req) => {
       throw new Error("Autorização necessária");
     }
 
+    console.log("Authorization header found, verifying token");
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
-    if (authError || !user) {
+    if (authError) {
+      console.error("Auth error:", authError);
       throw new Error("Usuário não autenticado");
     }
+    
+    if (!user) {
+      throw new Error("Usuário não encontrado");
+    }
+
+    console.log("User authenticated:", user.id);
 
     // Verificar se o usuário é admin
     const isAdmin = user.user_metadata?.tipo_usuario === "admin";
+    console.log("User admin status from metadata:", isAdmin);
+    
     if (!isAdmin) {
       // Verificar na tabela de perfis como fallback
       const { data: perfilData, error: perfilError } = await supabase
@@ -49,13 +62,18 @@ serve(async (req) => {
         .eq("id", user.id)
         .single();
 
+      console.log("Perfil data:", perfilData, "Perfil error:", perfilError);
+
       if (perfilError || perfilData?.tipo_usuario !== "admin") {
         throw new Error("Permissão negada: apenas administradores podem gerenciar usuários");
       }
     }
 
     // Parse request body
-    const { action, userId, userData, empresas, telas } = await req.json();
+    const requestData = await req.json();
+    console.log("Request data:", JSON.stringify(requestData));
+    
+    const { action, userId, userData, empresas, telas } = requestData;
 
     if (!action) {
       throw new Error("Ação não especificada");
@@ -66,6 +84,7 @@ serve(async (req) => {
     // Execute action
     switch (action) {
       case "create":
+        console.log("Creating user...");
         if (!userData || !userData.email || !userData.password) {
           throw new Error("Dados de usuário incompletos");
         }
@@ -76,16 +95,18 @@ serve(async (req) => {
           password: userData.password,
           email_confirm: true,
           user_metadata: userData.user_metadata || {},
-          // Usar user_metadata para armazenar o tipo de usuário e nome
         });
 
         if (createError) {
+          console.error("Error creating user:", createError);
           throw new Error(`Erro ao criar usuário: ${createError.message}`);
         }
 
         if (!createData.user) {
           throw new Error("Erro ao criar usuário: usuário não criado");
         }
+
+        console.log("User created successfully:", createData.user.id);
 
         // Atualizar perfil
         if (userData.user_metadata) {
@@ -104,6 +125,7 @@ serve(async (req) => {
 
         // Vincular empresas se fornecidas
         if (empresas && Array.isArray(empresas) && empresas.length > 0) {
+          console.log("Linking companies to user...");
           for (const empresaId of empresas) {
             const { error: empresaError } = await supabase
               .from("usuario_empresas")
@@ -120,6 +142,7 @@ serve(async (req) => {
 
         // Vincular telas se fornecidas
         if (telas && Array.isArray(telas) && telas.length > 0) {
+          console.log("Linking screens to user...");
           for (const tela of telas) {
             if (tela.permissao_leitura) {
               const { error: telaError } = await supabase
@@ -143,6 +166,7 @@ serve(async (req) => {
         break;
 
       case "update":
+        console.log("Updating user...");
         if (!userId) {
           throw new Error("ID do usuário não fornecido");
         }
@@ -171,12 +195,15 @@ serve(async (req) => {
         );
 
         if (updateUserError) {
+          console.error("Error updating user:", updateUserError);
           throw new Error(`Erro ao atualizar usuário: ${updateUserError.message}`);
         }
 
         if (!updateUserData.user) {
           throw new Error("Erro ao atualizar usuário: usuário não encontrado");
         }
+
+        console.log("User updated successfully:", updateUserData.user.id);
 
         // Atualizar perfil
         if (userData.user_metadata) {
@@ -195,6 +222,7 @@ serve(async (req) => {
 
         // Atualizar empresas vinculadas
         if (empresas) {
+          console.log("Updating company links...");
           // Remover empresas existentes
           const { error: deleteEmpresasError } = await supabase
             .from("usuario_empresas")
@@ -224,6 +252,7 @@ serve(async (req) => {
 
         // Atualizar telas vinculadas
         if (telas) {
+          console.log("Updating screen links...");
           // Remover telas existentes
           const { error: deleteTelaError } = await supabase
             .from("acesso_telas")
@@ -260,6 +289,7 @@ serve(async (req) => {
         break;
 
       case "delete":
+        console.log("Deleting user...");
         if (!userId) {
           throw new Error("ID do usuário não fornecido");
         }
@@ -268,9 +298,11 @@ serve(async (req) => {
         const { error: deleteError } = await supabase.auth.admin.deleteUser(userId);
 
         if (deleteError) {
+          console.error("Error deleting user:", deleteError);
           throw new Error(`Erro ao excluir usuário: ${deleteError.message}`);
         }
 
+        console.log("User deleted successfully:", userId);
         result = { success: true };
         break;
 
@@ -290,7 +322,7 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error("Erro na função manageUser:", error);
+    console.error("Error in manageUser function:", error);
     return new Response(
       JSON.stringify({
         success: false,

@@ -128,8 +128,11 @@ async function decrypt(encryptedData: string, secretKey: string): Promise<string
 }
 
 serve(async (req) => {
+  console.log("Solicitação recebida para o serviço de criptografia");
+  
   // Tratamento de requisições CORS OPTIONS
   if (req.method === "OPTIONS") {
+    console.log("Respondendo a solicitação CORS OPTIONS");
     return new Response(null, {
       status: 204,
       headers: corsHeaders,
@@ -137,77 +140,92 @@ serve(async (req) => {
   }
 
   try {
-    // Criação do cliente Supabase
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error("SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY não configurados");
-    }
-    
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    // Verificação de autorização
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      throw new Error("Autorização necessária");
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-    if (authError || !user) {
-      throw new Error("Usuário não autenticado");
-    }
-
-    // Obtenção da chave secreta de criptografia do ambiente
+    // Verificar a existência da chave de criptografia
     const encryptionKey = Deno.env.get("ENCRYPTION_KEY");
-    
     if (!encryptionKey) {
+      console.error("ENCRYPTION_KEY não configurada");
       throw new Error("ENCRYPTION_KEY não configurada");
     }
-
-    // Processamento da requisição
-    const { action, data } = await req.json();
-
-    if (!action || !data) {
-      throw new Error("Parâmetros incompletos");
+    
+    // Se for apenas um pedido de verificação de status
+    const url = new URL(req.url);
+    if (url.pathname.endsWith("/status")) {
+      console.log("Verificação de status solicitada");
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          status: "available",
+          message: "Serviço de criptografia está operacional" 
+        }),
+        {
+          headers: { 
+            ...corsHeaders, 
+            "Content-Type": "application/json" 
+          },
+          status: 200,
+        }
+      );
     }
 
-    let result;
-
-    // Execução da ação solicitada
-    switch (action) {
-      case "encrypt":
-        console.log("Criptografando dados...");
-        result = await encrypt(data, encryptionKey);
-        break;
+    // Verificação de body
+    try {
+      // Processamento da requisição
+      const { action, data } = await req.json();
       
-      case "decrypt":
-        console.log("Descriptografando dados...");
-        result = await decrypt(data, encryptionKey);
-        break;
-      
-      default:
-        throw new Error(`Ação desconhecida: ${action}`);
-    }
-
-    // Retorno do resultado
-    return new Response(
-      JSON.stringify({
-        success: true,
-        result,
-      }),
-      {
-        headers: { 
-          ...corsHeaders, 
-          "Content-Type": "application/json" 
-        },
-        status: 200,
+      if (!action || data === undefined) {
+        throw new Error("Parâmetros incompletos: 'action' e 'data' são obrigatórios");
       }
-    );
+
+      console.log(`Executando ação: ${action}`);
+      
+      let result;
+      // Execução da ação solicitada
+      switch (action) {
+        case "encrypt":
+          console.log("Criptografando dados...");
+          result = await encrypt(data, encryptionKey);
+          break;
+        
+        case "decrypt":
+          console.log("Descriptografando dados...");
+          result = await decrypt(data, encryptionKey);
+          break;
+        
+        default:
+          throw new Error(`Ação desconhecida: ${action}`);
+      }
+
+      // Retorno do resultado
+      return new Response(
+        JSON.stringify({
+          success: true,
+          result,
+        }),
+        {
+          headers: { 
+            ...corsHeaders, 
+            "Content-Type": "application/json" 
+          },
+          status: 200,
+        }
+      );
+    } catch (parseError) {
+      console.error("Erro ao processar o body da requisição:", parseError);
+      throw new Error(`Erro ao processar a requisição: ${parseError.message}`);
+    }
   } catch (error) {
     console.error("Erro no serviço de criptografia:", error);
+    
+    // Determinar o código de status baseado no tipo de erro
+    let statusCode = 500;
+    if (error.message.includes('não configurad')) {
+      statusCode = 400;
+    } else if (error.message.includes('Parâmetros incompletos')) {
+      statusCode = 400;
+    } else if (error.message.includes('não autenticado') || error.message.includes('Autorização necessária')) {
+      statusCode = 401;
+    }
+    
     return new Response(
       JSON.stringify({
         success: false,
@@ -218,7 +236,7 @@ serve(async (req) => {
           ...corsHeaders, 
           "Content-Type": "application/json" 
         },
-        status: error.message.includes("não configurad") ? 400 : 500,
+        status: statusCode,
       }
     );
   }

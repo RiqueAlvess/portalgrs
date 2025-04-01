@@ -16,14 +16,28 @@ export const cryptoClient = {
         body: { action: 'encrypt', data }
       });
 
-      if (error || !result?.success) {
-        console.error('Erro ao criptografar dados:', error || result?.error);
+      if (error) {
+        console.error('Erro na chamada da Edge Function:', error);
+        if (error.message.includes('524')) {
+          throw new Error('Timeout na conexão com o serviço de criptografia. Verifique se a Edge Function está ativa.');
+        }
+        throw new Error(`Erro na Edge Function: ${error.message}`);
+      }
+
+      if (!result?.success) {
+        console.error('Erro retornado pelo serviço de criptografia:', result?.error);
         throw new Error(result?.error || 'Falha ao criptografar dados');
       }
 
       return result.result;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao chamar o serviço de criptografia:', error);
+      
+      // Melhorar as mensagens de erro para facilitar o diagnóstico
+      if (error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+        throw new Error('Não foi possível conectar ao serviço de criptografia. Verifique sua conexão e se a Edge Function está implantada.');
+      }
+      
       throw error;
     }
   },
@@ -39,14 +53,28 @@ export const cryptoClient = {
         body: { action: 'decrypt', data: encryptedData }
       });
 
-      if (error || !result?.success) {
-        console.error('Erro ao descriptografar dados:', error || result?.error);
+      if (error) {
+        console.error('Erro na chamada da Edge Function:', error);
+        if (error.message.includes('524')) {
+          throw new Error('Timeout na conexão com o serviço de criptografia. Verifique se a Edge Function está ativa.');
+        }
+        throw new Error(`Erro na Edge Function: ${error.message}`);
+      }
+
+      if (!result?.success) {
+        console.error('Erro retornado pelo serviço de criptografia:', result?.error);
         throw new Error(result?.error || 'Falha ao descriptografar dados');
       }
 
       return result.result;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao chamar o serviço de criptografia:', error);
+      
+      // Melhorar as mensagens de erro para facilitar o diagnóstico
+      if (error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+        throw new Error('Não foi possível conectar ao serviço de criptografia. Verifique sua conexão e se a Edge Function está implantada.');
+      }
+      
       throw error;
     }
   },

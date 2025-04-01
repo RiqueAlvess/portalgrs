@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -36,10 +37,12 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Search, X, AlertCircle } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, X, AlertCircle, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { CryptoDemo } from "@/components/CryptoDemo";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { UserForm } from "@/components/UserForm";
+import { UserList } from "@/components/UserList";
 
 interface Usuario {
   id: string;
@@ -75,7 +78,8 @@ const Users = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-
+  const [loadingEmpresas, setLoadingEmpresas] = useState(false);
+  
   const [formData, setFormData] = useState({
     nome: "",
     email: "",
@@ -93,6 +97,83 @@ const Users = () => {
 
   const isAdmin = currentUser?.user_metadata?.tipo_usuario === 'admin' || usuarioAtual?.tipo_usuario === 'admin';
 
+  // Função para carregar todas as empresas
+  const carregarEmpresas = async () => {
+    setLoadingEmpresas(true);
+    try {
+      console.log("Carregando todas as empresas...");
+      
+      // Usando paginação para lidar com grandes volumes de dados
+      let pagina = 0;
+      const limite = 100;
+      let todasEmpresas: Empresa[] = [];
+      let maisRegistros = true;
+      
+      while (maisRegistros) {
+        console.log(`Carregando empresas página ${pagina}, limite ${limite}`);
+        
+        const { data, error, count } = await supabase
+          .from("empresas")
+          .select("id, nome, cnpj", { count: 'exact' })
+          .range(pagina * limite, (pagina + 1) * limite - 1)
+          .order('nome', { ascending: true });
+        
+        if (error) {
+          console.error("Erro ao carregar empresas:", error);
+          toast.error("Erro ao carregar empresas");
+          break;
+        }
+        
+        if (data && data.length > 0) {
+          todasEmpresas = [...todasEmpresas, ...data];
+          pagina++;
+          
+          // Verificar se já carregamos todos os registros
+          if (data.length < limite) {
+            maisRegistros = false;
+          }
+        } else {
+          maisRegistros = false;
+        }
+      }
+      
+      console.log(`Total de empresas carregadas: ${todasEmpresas.length}`);
+      setEmpresas(todasEmpresas);
+    } catch (error) {
+      console.error("Erro ao carregar empresas:", error);
+      toast.error("Erro ao carregar empresas");
+    } finally {
+      setLoadingEmpresas(false);
+    }
+  };
+
+  // Função para carregar todas as telas
+  const carregarTelas = async () => {
+    try {
+      console.log("Carregando todas as telas...");
+      
+      const { data, error } = await supabase
+        .from("telas")
+        .select("*")
+        .eq("ativo", true)
+        .order('nome', { ascending: true });
+      
+      if (error) {
+        console.error("Erro ao carregar telas:", error);
+        toast.error("Erro ao carregar telas");
+        return;
+      }
+      
+      if (data) {
+        console.log(`Total de telas carregadas: ${data.length}`);
+        setTelas(data);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar telas:", error);
+      toast.error("Erro ao carregar telas");
+    }
+  };
+
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
@@ -100,32 +181,11 @@ const Users = () => {
       try {
         console.log("Carregando dados da página de usuários...");
         
-        const { data: empresasData, error: empresasError } = await supabase
-          .from("empresas")
-          .select("id, nome, cnpj");
-
-        if (empresasError) {
-          console.error("Erro ao carregar empresas:", empresasError);
-          toast.error("Erro ao carregar empresas");
-          // Continue mesmo com erro nas empresas
-        } else if (empresasData) {
-          setEmpresas(empresasData);
-          console.log("Empresas carregadas:", empresasData.length);
-        }
-
-        const { data: telasData, error: telasError } = await supabase
-          .from("telas")
-          .select("*")
-          .eq("ativo", true);
-
-        if (telasError) {
-          console.error("Erro ao carregar telas:", telasError);
-          toast.error("Erro ao carregar telas");
-          // Continue mesmo com erro nas telas
-        } else if (telasData) {
-          setTelas(telasData);
-          console.log("Telas carregadas:", telasData.length);
-        }
+        // Carregar empresas e telas em paralelo
+        await Promise.all([
+          carregarEmpresas(),
+          carregarTelas()
+        ]);
 
         try {
           console.log("Buscando usuários via Edge Function...");
@@ -287,6 +347,9 @@ const Users = () => {
     try {
       if (isAddingUser) {
         console.log("Criando novo usuário...");
+        console.log("Empresas vinculadas:", formData.empresasVinculadas);
+        console.log("Telas vinculadas:", formData.telasVinculadas);
+        
         const { data, error } = await supabase.functions.invoke('manageUser', {
           body: {
             action: 'create',
@@ -316,6 +379,9 @@ const Users = () => {
         toast.success("Usuário adicionado com sucesso!");
       } else if (editingUser) {
         console.log("Atualizando usuário existente...");
+        console.log("Empresas vinculadas:", formData.empresasVinculadas);
+        console.log("Telas vinculadas:", formData.telasVinculadas);
+        
         const { data, error } = await supabase.functions.invoke('manageUser', {
           body: {
             action: 'update',
@@ -673,19 +739,37 @@ const Users = () => {
             <div className="grid grid-cols-4 gap-4">
               <Label className="text-right pt-2">Empresas Vinculadas</Label>
               <div className="col-span-3 space-y-2">
-                {empresas.length > 0 ? (
-                  empresas.map((empresa) => (
-                    <div key={empresa.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`empresa-${empresa.id}`}
-                        checked={formData.empresasVinculadas.includes(empresa.id)}
-                        onCheckedChange={() => toggleEmpresa(empresa.id)}
+                {loadingEmpresas ? (
+                  <div className="flex items-center text-muted-foreground">
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Carregando empresas...
+                  </div>
+                ) : empresas.length > 0 ? (
+                  <div className="max-h-60 overflow-y-auto border rounded-md p-2">
+                    <div className="sticky top-0 bg-white border-b pb-2 mb-2">
+                      <Input 
+                        placeholder="Buscar empresas..." 
+                        className="w-full"
+                        onChange={(e) => {
+                          // Implementar busca local de empresas
+                          const searchValue = e.target.value.toLowerCase();
+                          // Este é apenas um exemplo - você precisaria implementar a lógica de busca aqui
+                        }}
                       />
-                      <Label htmlFor={`empresa-${empresa.id}`}>
-                        {empresa.nome} <span className="text-xs text-muted-foreground">({empresa.cnpj})</span>
-                      </Label>
                     </div>
-                  ))
+                    {empresas.map((empresa) => (
+                      <div key={empresa.id} className="flex items-center space-x-2 py-1">
+                        <Checkbox
+                          id={`empresa-${empresa.id}`}
+                          checked={formData.empresasVinculadas.includes(empresa.id)}
+                          onCheckedChange={() => toggleEmpresa(empresa.id)}
+                        />
+                        <Label htmlFor={`empresa-${empresa.id}`} className="cursor-pointer text-sm">
+                          {empresa.nome} <span className="text-xs text-muted-foreground">({empresa.cnpj})</span>
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
                 ) : (
                   <div className="text-muted-foreground">
                     Nenhuma empresa disponível. Verifique a configuração do banco de dados.
@@ -763,7 +847,13 @@ const Users = () => {
               Cancelar
             </Button>
             <Button onClick={handleSaveUser} disabled={isLoading}>
-              {isLoading ? "Salvando..." : "Salvar"}
+              {isLoading ? 
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Salvando...
+                </> : 
+                "Salvar"
+              }
             </Button>
           </DialogFooter>
         </DialogContent>

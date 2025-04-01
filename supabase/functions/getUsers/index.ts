@@ -69,22 +69,37 @@ serve(async (req) => {
       }
     }
 
-    // List users
-    console.log("Listing users...");
-    const { data: listUsersData, error: listUsersError } = await supabase.auth.admin.listUsers();
-
-    if (listUsersError) {
-      console.error("Error listing users:", listUsersError);
-      throw new Error(`Erro ao listar usuários: ${listUsersError.message}`);
+    // Parse request body for any filters
+    let filters = {};
+    try {
+      if (req.method === "POST") {
+        const requestData = await req.json();
+        filters = requestData.filters || {};
+      }
+    } catch (error) {
+      console.log("No request body or invalid JSON, using default filters");
     }
 
-    console.log("Successfully listed users, count:", listUsersData.users.length);
+    console.log("Listing users...");
+    
+    // Listar usuários
+    const { data: users, error: usersError } = await supabase.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000, // Aumente conforme necessário
+    });
 
-    // Return users data
+    if (usersError) {
+      console.error("Error listing users:", usersError);
+      throw new Error(`Erro ao listar usuários: ${usersError.message}`);
+    }
+
+    console.log("Successfully listed users, count:", users.users.length);
+
+    // Return users
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        users: listUsersData.users 
+      JSON.stringify({
+        success: true,
+        users: users.users
       }),
       {
         headers: { 
@@ -99,7 +114,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message || "Erro interno do servidor",
+        message: error.message || "Erro interno do servidor",
       }),
       {
         headers: { 

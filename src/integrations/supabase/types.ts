@@ -672,6 +672,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      importar_empresa: {
+        Args: {
+          p_nome: string
+          p_cnpj: string
+          p_razao_social?: string
+          p_nome_abreviado?: string
+          p_endereco?: string
+          p_numero_endereco?: string
+          p_bairro?: string
+          p_cidade?: string
+          p_uf?: string
+          p_cep?: string
+          p_codigo?: string
+        }
+        Returns: string
+      }
       is_admin: {
         Args: Record<PropertyKey, never>
         Returns: boolean
@@ -680,6 +696,10 @@ export type Database = {
         Args: {
           empresa_id: string
         }
+        Returns: boolean
+      }
+      verificar_funcao_importar_empresa: {
+        Args: Record<PropertyKey, never>
         Returns: boolean
       }
     }

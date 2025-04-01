@@ -125,8 +125,9 @@ serve(async (req) => {
 
         // Vincular empresas se fornecidas
         if (empresas && Array.isArray(empresas) && empresas.length > 0) {
-          console.log("Linking companies to user...");
+          console.log("Linking companies to user...", empresas);
           for (const empresaId of empresas) {
+            console.log(`Vinculando empresa ${empresaId} ao usuário ${createData.user.id}`);
             const { error: empresaError } = await supabase
               .from("usuario_empresas")
               .insert({
@@ -135,16 +136,19 @@ serve(async (req) => {
               });
 
             if (empresaError) {
-              console.error("Erro ao vincular empresa:", empresaError);
+              console.error(`Erro ao vincular empresa ${empresaId}:`, empresaError);
             }
           }
+        } else {
+          console.log("No companies to link");
         }
 
         // Vincular telas se fornecidas
         if (telas && Array.isArray(telas) && telas.length > 0) {
-          console.log("Linking screens to user...");
+          console.log("Linking screens to user...", telas.length);
           for (const tela of telas) {
             if (tela.permissao_leitura) {
+              console.log(`Vinculando tela ${tela.id} ao usuário ${createData.user.id}`);
               const { error: telaError } = await supabase
                 .from("acesso_telas")
                 .insert({
@@ -156,10 +160,12 @@ serve(async (req) => {
                 });
 
               if (telaError) {
-                console.error("Erro ao vincular tela:", telaError);
+                console.error(`Erro ao vincular tela ${tela.id}:`, telaError);
               }
             }
           }
+        } else {
+          console.log("No screens to link");
         }
 
         result = { success: true, user: createData.user };
@@ -223,6 +229,8 @@ serve(async (req) => {
         // Atualizar empresas vinculadas
         if (empresas) {
           console.log("Updating company links...");
+          console.log("Empresas a serem vinculadas:", empresas);
+          
           // Remover empresas existentes
           const { error: deleteEmpresasError } = await supabase
             .from("usuario_empresas")
@@ -236,6 +244,7 @@ serve(async (req) => {
           // Adicionar novas empresas
           if (Array.isArray(empresas) && empresas.length > 0) {
             for (const empresaId of empresas) {
+              console.log(`Vinculando empresa ${empresaId} ao usuário ${userId}`);
               const { error: empresaError } = await supabase
                 .from("usuario_empresas")
                 .insert({
@@ -244,15 +253,19 @@ serve(async (req) => {
                 });
 
               if (empresaError) {
-                console.error("Erro ao vincular empresa:", empresaError);
+                console.error(`Erro ao vincular empresa ${empresaId}:`, empresaError);
               }
             }
+          } else {
+            console.log("No companies to link");
           }
         }
 
         // Atualizar telas vinculadas
         if (telas) {
           console.log("Updating screen links...");
+          console.log("Telas a serem vinculadas:", telas.length);
+          
           // Remover telas existentes
           const { error: deleteTelaError } = await supabase
             .from("acesso_telas")
@@ -267,6 +280,7 @@ serve(async (req) => {
           if (Array.isArray(telas) && telas.length > 0) {
             for (const tela of telas) {
               if (tela.permissao_leitura) {
+                console.log(`Vinculando tela ${tela.id} ao usuário ${userId}`);
                 const { error: telaError } = await supabase
                   .from("acesso_telas")
                   .insert({
@@ -278,10 +292,12 @@ serve(async (req) => {
                   });
 
                 if (telaError) {
-                  console.error("Erro ao vincular tela:", telaError);
+                  console.error(`Erro ao vincular tela ${tela.id}:`, telaError);
                 }
               }
             }
+          } else {
+            console.log("No screens to link");
           }
         }
 

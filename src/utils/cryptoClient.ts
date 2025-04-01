@@ -6,6 +6,37 @@ import { supabase } from "@/integrations/supabase/client";
  */
 export const cryptoClient = {
   /**
+   * Verifica o status do serviço de criptografia
+   * @returns Status do serviço
+   */
+  async status(): Promise<{ data?: { available: boolean, message?: string }, error?: string }> {
+    try {
+      const { data, error } = await supabase.functions.invoke('cryptoService', {
+        body: { action: 'status' }
+      });
+
+      if (error) {
+        console.error('Erro na chamada da Edge Function:', error);
+        return {
+          error: error.message || 'Erro ao verificar status do serviço de criptografia'
+        };
+      }
+
+      return { 
+        data: {
+          available: data?.available || false,
+          message: data?.message
+        }
+      };
+    } catch (error: any) {
+      console.error('Erro ao verificar status do serviço de criptografia:', error);
+      return {
+        error: error.message || 'Erro ao verificar status do serviço de criptografia'
+      };
+    }
+  },
+
+  /**
    * Criptografa uma string
    * @param data String a ser criptografada
    * @returns String criptografada

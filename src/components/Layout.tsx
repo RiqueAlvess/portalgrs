@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 
 const Layout = () => {
-  const { perfil, empresas, empresaAtual, logout, mudarEmpresa } = useAuth();
+  const { user, perfil, empresas, empresaAtual, logout, mudarEmpresa } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -42,7 +42,7 @@ const Layout = () => {
     }
   };
 
-  // Atualizar a navegação sempre que o perfil mudar
+  // Atualizar a navegação sempre que o perfil ou os metadados do usuário mudarem
   useEffect(() => {
     const baseNavigation = [
       { name: "Dashboard", path: "/", icon: <LayoutDashboard className="h-5 w-5" /> },
@@ -51,19 +51,30 @@ const Layout = () => {
       { name: "Exames Médicos", path: "/medical-exams", icon: <FileText className="h-5 w-5" /> },
     ];
 
-    // Adicionar item de navegação para usuários admin
-    if (perfil?.tipo_usuario === "admin") {
+    // Verificação direta dos metadados do usuário
+    const isAdmin = user?.user_metadata?.tipo_usuario === 'admin' || perfil?.tipo_usuario === 'admin';
+    
+    if (isAdmin) {
       console.log("Usuário admin detectado, adicionando menu de Usuários");
       baseNavigation.push({ name: "Usuários", path: "/users", icon: <UserCog className="h-5 w-5" /> });
       toast.success("Bem-vindo, Administrador!");
+    } else {
+      console.log("Usuário normal detectado, tipo:", 
+        user?.user_metadata?.tipo_usuario || perfil?.tipo_usuario || 'desconhecido');
     }
 
+    // Imprimir logs detalhados para ajudar na depuração
+    console.log("Metadados do usuário:", user?.user_metadata);
+    console.log("Perfil do usuário:", perfil);
+
     setNavigation(baseNavigation);
-  }, [perfil]);
+  }, [user, perfil]);
 
   // Função para obter o texto do tipo de usuário
   const getUserTypeText = (type: string | undefined) => {
-    if (type === "admin") return "Administrador";
+    // Verificar diretamente dos metadados do usuário, com fallback para o perfil
+    const userType = user?.user_metadata?.tipo_usuario || type;
+    if (userType === "admin") return "Administrador";
     return "Usuário";
   };
 

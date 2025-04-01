@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -39,8 +38,9 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Search, X, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { CryptoDemo } from "@/components/CryptoDemo";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-// Interface para os usuários
 interface Usuario {
   id: string;
   email: string;
@@ -76,7 +76,6 @@ const Users = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Form states
   const [formData, setFormData] = useState({
     nome: "",
     email: "",
@@ -92,10 +91,8 @@ const Users = () => {
     ativo: true
   });
 
-  // Verificar se o usuário atual é admin
   const isAdmin = currentUser?.user_metadata?.tipo_usuario === 'admin' || usuarioAtual?.tipo_usuario === 'admin';
 
-  // Carregar usuários, empresas e telas
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
@@ -103,7 +100,6 @@ const Users = () => {
       try {
         console.log("Carregando dados da página de usuários...");
         
-        // Buscar empresas
         const { data: empresasData, error: empresasError } = await supabase
           .from("empresas")
           .select("id, nome, cnpj");
@@ -117,7 +113,6 @@ const Users = () => {
           console.log("Empresas carregadas:", empresasData.length);
         }
 
-        // Buscar telas
         const { data: telasData, error: telasError } = await supabase
           .from("telas")
           .select("*")
@@ -132,7 +127,6 @@ const Users = () => {
           console.log("Telas carregadas:", telasData.length);
         }
 
-        // Usar o service role para buscar usuários (função administrativa)
         try {
           console.log("Buscando usuários via Edge Function...");
           const { data, error } = await supabase.functions.invoke('getUsers', {
@@ -151,10 +145,8 @@ const Users = () => {
 
           console.log("Usuários carregados via edge function:", data.users.length);
           
-          // Processar usuários
           const usuariosProcessados = await Promise.all(
             data.users.map(async (user: any) => {
-              // Verificar empresas vinculadas
               const { data: vinculacoesEmpresas, error: vinculacoesEmpresasError } = await supabase
                 .from("usuario_empresas")
                 .select(`
@@ -167,7 +159,6 @@ const Users = () => {
                 console.error("Erro ao carregar empresas do usuário:", vinculacoesEmpresasError);
               }
 
-              // Verificar telas vinculadas
               const { data: vinculacoesTelas, error: vinculacoesTelaError } = await supabase
                 .from("acesso_telas")
                 .select(`
@@ -183,13 +174,11 @@ const Users = () => {
                 console.error("Erro ao carregar telas do usuário:", vinculacoesTelaError);
               }
 
-              // Formatação das empresas do usuário
               const empresasUsuario = vinculacoesEmpresas?.map(v => ({
                 id: v.empresa.id,
                 nome: v.empresa.nome
               })) || [];
 
-              // Formatação das telas do usuário
               const telasUsuario = vinculacoesTelas?.map(v => ({
                 id: v.tela.id,
                 nome: v.tela.nome,
@@ -230,15 +219,12 @@ const Users = () => {
     }
   }, [isAdmin, currentUser]);
 
-  // Filtrar usuários
   const filteredUsers = usuarios.filter(usuario =>
     usuario.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
     usuario.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Iniciar adição de novo usuário
   const handleAddUser = () => {
-    // Inicializar form data com todas as telas disponíveis
     const telasIniciais = telas.map(tela => ({
       id: tela.id,
       permissao_leitura: true,
@@ -260,9 +246,7 @@ const Users = () => {
     setIsDialogOpen(true);
   };
 
-  // Iniciar edição de usuário
   const handleEditUser = (user: Usuario) => {
-    // Mapear telas existentes e preencher com permissões do usuário
     const telasVinculadas = telas.map(tela => {
       const telaUsuario = user.telas.find(t => t.id === tela.id);
       return {
@@ -287,7 +271,6 @@ const Users = () => {
     setIsDialogOpen(true);
   };
 
-  // Salvar usuário (novo ou editado)
   const handleSaveUser = async () => {
     if (!formData.nome || !formData.email) {
       toast.error("Nome e email são obrigatórios");
@@ -304,7 +287,6 @@ const Users = () => {
     try {
       if (isAddingUser) {
         console.log("Criando novo usuário...");
-        // Criar ou atualizar usuário via edge function
         const { data, error } = await supabase.functions.invoke('manageUser', {
           body: {
             action: 'create',
@@ -334,7 +316,6 @@ const Users = () => {
         toast.success("Usuário adicionado com sucesso!");
       } else if (editingUser) {
         console.log("Atualizando usuário existente...");
-        // Atualizar usuário via edge function
         const { data, error } = await supabase.functions.invoke('manageUser', {
           body: {
             action: 'update',
@@ -365,7 +346,6 @@ const Users = () => {
         toast.success("Usuário atualizado com sucesso!");
       }
 
-      // Recarregar dados
       window.location.reload();
     } catch (error) {
       console.error("Erro ao salvar usuário:", error);
@@ -376,9 +356,7 @@ const Users = () => {
     }
   };
 
-  // Excluir usuário
   const handleDeleteUser = async (id: string) => {
-    // Verificar se o usuário não está excluindo a si mesmo
     if (id === usuarioAtual?.id || id === currentUser?.id) {
       toast.error("Não é possível excluir seu próprio usuário");
       return;
@@ -407,7 +385,6 @@ const Users = () => {
         
         toast.success("Usuário excluído com sucesso");
         
-        // Atualizar lista de usuários
         setUsuarios(usuarios.filter(u => u.id !== id));
       } catch (error) {
         console.error("Erro ao excluir usuário:", error);
@@ -418,7 +395,6 @@ const Users = () => {
     }
   };
 
-  // Toggle para empresa vinculada no form
   const toggleEmpresa = (empresaId: string) => {
     setFormData(prev => {
       if (prev.empresasVinculadas.includes(empresaId)) {
@@ -435,7 +411,6 @@ const Users = () => {
     });
   };
 
-  // Atualizar permissões de tela
   const updateTelaPermission = (telaId: string, permissionType: 'permissao_leitura' | 'permissao_escrita' | 'permissao_exclusao', value: boolean) => {
     setFormData(prev => {
       const newTelasVinculadas = [...prev.telasVinculadas];
@@ -447,13 +422,11 @@ const Users = () => {
           [permissionType]: value
         };
         
-        // Se desmarcar leitura, desmarcar também escrita e exclusão
         if (permissionType === 'permissao_leitura' && !value) {
           newTelasVinculadas[telaIndex].permissao_escrita = false;
           newTelasVinculadas[telaIndex].permissao_exclusao = false;
         }
         
-        // Se marcar escrita/exclusão, garantir que leitura esteja marcada
         if ((permissionType === 'permissao_escrita' || permissionType === 'permissao_exclusao') && value) {
           newTelasVinculadas[telaIndex].permissao_leitura = true;
         }
@@ -466,7 +439,6 @@ const Users = () => {
     });
   };
 
-  // Se não for admin, exibir mensagem de acesso restrito
   if (!isAdmin) {
     return (
       <div className="flex items-center justify-center min-h-[80vh]">
@@ -498,128 +470,140 @@ const Users = () => {
         </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <CardTitle>Usuários do Sistema</CardTitle>
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Buscar usuários..."
-                className="pl-8"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm("")}
-                  className="absolute right-2.5 top-2.5"
-                >
-                  <X className="h-4 w-4 text-muted-foreground" />
-                </button>
-              )}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-sidebar-accent"></div>
-            </div>
-          ) : loadError ? (
-            <div className="text-center py-6 border rounded-md p-4 bg-destructive/10 text-destructive">
-              <AlertCircle className="h-8 w-8 mx-auto mb-2" />
-              <h3 className="font-semibold mb-2">Erro ao carregar usuários</h3>
-              <p>{loadError}</p>
-              <p className="text-sm mt-4">
-                Verifique se as Edge Functions estão corretamente implantadas no Supabase
-                e se as variáveis de ambiente SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY estão configuradas.
-              </p>
-              <Button 
-                onClick={() => window.location.reload()}
-                variant="outline"
-                className="mt-4"
-              >
-                Tentar novamente
-              </Button>
-            </div>
-          ) : usuarios.length === 0 ? (
-            <div className="text-center py-6 text-muted-foreground">
-              <p>Nenhum usuário encontrado. Use funções Edge para administração de usuários.</p>
-              <p className="text-sm mt-2">Esta funcionalidade requer configuração de Edge Functions no Supabase.</p>
-            </div>
-          ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Empresas</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredUsers.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
-                        Nenhum usuário encontrado com o termo de busca
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredUsers.map((usuario) => (
-                      <TableRow key={usuario.id}>
-                        <TableCell className="font-medium">{usuario.nome}</TableCell>
-                        <TableCell>{usuario.email}</TableCell>
-                        <TableCell>
-                          {usuario.tipo_usuario === "admin" ? "Administrador" : "Usuário Normal"}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            {usuario.empresas.length > 0 ? (
-                              usuario.empresas.map((emp) => (
-                                <span key={emp.id} className="text-sm">
-                                  {emp.nome}
-                                </span>
-                              ))
-                            ) : (
-                              <span className="text-sm text-muted-foreground">Sem empresas vinculadas</span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button 
-                              variant="ghost" 
-                              size="icon"
-                              onClick={() => handleEditUser(usuario)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                              <span className="sr-only">Editar</span>
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="icon"
-                              onClick={() => handleDeleteUser(usuario.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              <span className="sr-only">Excluir</span>
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
+      <Tabs defaultValue="usuarios" className="mb-6">
+        <TabsList>
+          <TabsTrigger value="usuarios">Usuários</TabsTrigger>
+          <TabsTrigger value="criptografia">Criptografia</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="usuarios">
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <CardTitle>Usuários do Sistema</CardTitle>
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Buscar usuários..."
+                    className="pl-8"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm("")}
+                      className="absolute right-2.5 top-2.5"
+                    >
+                      <X className="h-4 w-4 text-muted-foreground" />
+                    </button>
                   )}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-sidebar-accent"></div>
+                </div>
+              ) : loadError ? (
+                <div className="text-center py-6 border rounded-md p-4 bg-destructive/10 text-destructive">
+                  <AlertCircle className="h-8 w-8 mx-auto mb-2" />
+                  <h3 className="font-semibold mb-2">Erro ao carregar usuários</h3>
+                  <p>{loadError}</p>
+                  <p className="text-sm mt-4">
+                    Verifique se as Edge Functions estão corretamente implantadas no Supabase
+                    e se as variáveis de ambiente SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY estão configuradas.
+                  </p>
+                  <Button 
+                    onClick={() => window.location.reload()}
+                    variant="outline"
+                    className="mt-4"
+                  >
+                    Tentar novamente
+                  </Button>
+                </div>
+              ) : usuarios.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">
+                  <p>Nenhum usuário encontrado. Use funções Edge para administração de usuários.</p>
+                  <p className="text-sm mt-2">Esta funcionalidade requer configuração de Edge Functions no Supabase.</p>
+                </div>
+              ) : (
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Empresas</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredUsers.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
+                            Nenhum usuário encontrado com o termo de busca
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredUsers.map((usuario) => (
+                          <TableRow key={usuario.id}>
+                            <TableCell className="font-medium">{usuario.nome}</TableCell>
+                            <TableCell>{usuario.email}</TableCell>
+                            <TableCell>
+                              {usuario.tipo_usuario === "admin" ? "Administrador" : "Usuário Normal"}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                {usuario.empresas.length > 0 ? (
+                                  usuario.empresas.map((emp) => (
+                                    <span key={emp.id} className="text-sm">
+                                      {emp.nome}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-sm text-muted-foreground">Sem empresas vinculadas</span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => handleEditUser(usuario)}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                  <span className="sr-only">Editar</span>
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => handleDeleteUser(usuario.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  <span className="sr-only">Excluir</span>
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="criptografia">
+          <CryptoDemo />
+        </TabsContent>
+      </Tabs>
 
-      {/* Modal para adicionar/editar usuário */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -686,7 +670,6 @@ const Users = () => {
               </Select>
             </div>
             
-            {/* Empresas Vinculadas */}
             <div className="grid grid-cols-4 gap-4">
               <Label className="text-right pt-2">Empresas Vinculadas</Label>
               <div className="col-span-3 space-y-2">
@@ -711,7 +694,6 @@ const Users = () => {
               </div>
             </div>
             
-            {/* Telas e Permissões */}
             <div className="grid grid-cols-4 gap-4">
               <Label className="text-right pt-2">Permissões de Telas</Label>
               <div className="col-span-3">

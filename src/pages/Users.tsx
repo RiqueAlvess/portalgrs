@@ -44,10 +44,8 @@ import { supabase } from "@/integrations/supabase/client";
 interface Usuario {
   id: string;
   email: string;
-  perfil: {
-    nome: string;
-    tipo_usuario: "admin" | "normal";
-  };
+  nome: string;
+  tipo_usuario: "admin" | "normal";
   empresas: { id: string; nome: string }[];
   telas: { id: string; nome: string; permissao_leitura?: boolean; permissao_escrita?: boolean; permissao_exclusao?: boolean }[];
   ativo: boolean;
@@ -67,7 +65,7 @@ interface Empresa {
 }
 
 const Users = () => {
-  const { perfil: usuarioAtual } = useAuth();
+  const { user: currentUser, perfil: usuarioAtual } = useAuth();
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [telas, setTelas] = useState<Tela[]>([]);
@@ -93,11 +91,16 @@ const Users = () => {
     ativo: true
   });
 
+  // Verificar se o usuário atual é admin
+  const isAdmin = currentUser?.user_metadata?.tipo_usuario === 'admin' || usuarioAtual?.tipo_usuario === 'admin';
+
   // Carregar usuários, empresas e telas
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
       try {
+        console.log("Carregando dados da página de usuários...");
+        
         // Buscar empresas
         const { data: empresasData, error: empresasError } = await supabase
           .from("empresas")
@@ -108,6 +111,7 @@ const Users = () => {
           toast.error("Erro ao carregar empresas");
         } else if (empresasData) {
           setEmpresas(empresasData);
+          console.log("Empresas carregadas:", empresasData.length);
         }
 
         // Buscar telas
@@ -121,106 +125,88 @@ const Users = () => {
           toast.error("Erro ao carregar telas");
         } else if (telasData) {
           setTelas(telasData);
+          console.log("Telas carregadas:", telasData.length);
         }
 
-        // Buscar usuários com seus emails
-        const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
+        // Usar o service role para buscar usuários (função administrativa)
+        const { data: usersData, error: usersError } = await supabase.functions.invoke('getUsers', {
+          body: { isAdmin: true }
+        });
         
-        if (authError) {
-          console.error("Erro ao carregar usuários:", authError);
+        if (usersError) {
+          console.error("Erro ao carregar usuários:", usersError);
           toast.error("Erro ao carregar usuários");
           return;
         }
         
-        // Mapear usuários auth para um objeto com id -> email
-        const usersEmailMap: Record<string, string> = {};
-        if (authUsers?.users) {
-          authUsers.users.forEach((user: any) => {
-            if (user && typeof user === 'object' && 'id' in user && 'email' in user) {
-              usersEmailMap[user.id] = user.email || '';
-            }
-          });
-        }
-
-        // Buscar perfis
-        const { data: perfilsData, error: perfilsError } = await supabase
-          .from("perfis")
-          .select(`
-            id,
-            nome,
-            tipo_usuario
-          `);
-
-        if (perfilsError) {
-          console.error("Erro ao carregar perfis:", perfilsError);
-          toast.error("Erro ao carregar perfis");
+        if (!usersData || !Array.isArray(usersData.users)) {
+          console.error("Resposta inválida da função getUsers:", usersData);
+          toast.error("Erro ao carregar usuários");
           return;
         }
 
-        if (perfilsData) {
-          // Para cada perfil, buscar suas empresas e telas vinculadas
-          const usuariosCompletos = await Promise.all(
-            perfilsData.map(async (perfil) => {
-              // Buscar empresas vinculadas ao usuário
-              const { data: vinculacoesEmpresas, error: vinculacoesEmpresasError } = await supabase
-                .from("usuario_empresas")
-                .select(`
-                  empresa_id,
-                  empresa:empresa_id(id, nome)
-                `)
-                .eq("usuario_id", perfil.id);
+        console.log("Usuários carregados via edge function:", usersData.users.length);
+        
+        // Processar usuários
+        const usuariosProcessados = await Promise.all(
+          usersData.users.map(async (user: any) => {
+            // Verificar empresas vinculadas
+            const { data: vinculacoesEmpresas, error: vinculacoesEmpresasError } = await supabase
+              .from("usuario_empresas")
+              .select(`
+                empresa_id,
+                empresa:empresa_id(id, nome)
+              `)
+              .eq("usuario_id", user.id);
 
-              if (vinculacoesEmpresasError) {
-                console.error("Erro ao carregar empresas do usuário:", vinculacoesEmpresasError);
-              }
+            if (vinculacoesEmpresasError) {
+              console.error("Erro ao carregar empresas do usuário:", vinculacoesEmpresasError);
+            }
 
-              // Buscar telas vinculadas ao usuário
-              const { data: vinculacoesTelas, error: vinculacoesTelaError } = await supabase
-                .from("acesso_telas")
-                .select(`
-                  tela_id,
-                  permissao_leitura,
-                  permissao_escrita,
-                  permissao_exclusao,
-                  tela:tela_id(id, nome)
-                `)
-                .eq("usuario_id", perfil.id);
+            // Verificar telas vinculadas
+            const { data: vinculacoesTelas, error: vinculacoesTelaError } = await supabase
+              .from("acesso_telas")
+              .select(`
+                tela_id,
+                permissao_leitura,
+                permissao_escrita,
+                permissao_exclusao,
+                tela:tela_id(id, nome)
+              `)
+              .eq("usuario_id", user.id);
 
-              if (vinculacoesTelaError) {
-                console.error("Erro ao carregar telas do usuário:", vinculacoesTelaError);
-              }
+            if (vinculacoesTelaError) {
+              console.error("Erro ao carregar telas do usuário:", vinculacoesTelaError);
+            }
 
-              // Formatação das empresas do usuário
-              const empresasUsuario = vinculacoesEmpresas?.map(v => ({
-                id: v.empresa.id,
-                nome: v.empresa.nome
-              })) || [];
+            // Formatação das empresas do usuário
+            const empresasUsuario = vinculacoesEmpresas?.map(v => ({
+              id: v.empresa.id,
+              nome: v.empresa.nome
+            })) || [];
 
-              // Formatação das telas do usuário
-              const telasUsuario = vinculacoesTelas?.map(v => ({
-                id: v.tela.id,
-                nome: v.tela.nome,
-                permissao_leitura: v.permissao_leitura,
-                permissao_escrita: v.permissao_escrita,
-                permissao_exclusao: v.permissao_exclusao
-              })) || [];
+            // Formatação das telas do usuário
+            const telasUsuario = vinculacoesTelas?.map(v => ({
+              id: v.tela.id,
+              nome: v.tela.nome,
+              permissao_leitura: v.permissao_leitura,
+              permissao_escrita: v.permissao_escrita,
+              permissao_exclusao: v.permissao_exclusao
+            })) || [];
 
-              return {
-                id: perfil.id,
-                email: usersEmailMap[perfil.id] || "Email não encontrado",
-                perfil: {
-                  nome: perfil.nome,
-                  tipo_usuario: perfil.tipo_usuario as "admin" | "normal"
-                },
-                empresas: empresasUsuario,
-                telas: telasUsuario,
-                ativo: true // Assumimos como ativo por padrão
-              };
-            })
-          );
+            return {
+              id: user.id,
+              email: user.email || "",
+              nome: user.user_metadata?.nome || user.user_metadata?.full_name || user.email || "Usuário sem nome",
+              tipo_usuario: user.user_metadata?.tipo_usuario || "normal",
+              empresas: empresasUsuario,
+              telas: telasUsuario,
+              ativo: user.is_confirmed
+            };
+          })
+        );
 
-          setUsuarios(usuariosCompletos);
-        }
+        setUsuarios(usuariosProcessados);
       } catch (error) {
         console.error("Erro ao carregar dados:", error);
         toast.error("Erro ao carregar dados");
@@ -229,12 +215,14 @@ const Users = () => {
       }
     };
 
-    loadData();
-  }, []);
+    if (isAdmin) {
+      loadData();
+    }
+  }, [isAdmin, currentUser]);
 
   // Filtrar usuários
   const filteredUsers = usuarios.filter(usuario =>
-    usuario.perfil.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    usuario.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
     usuario.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -276,10 +264,10 @@ const Users = () => {
     });
 
     setFormData({
-      nome: user.perfil.nome,
+      nome: user.nome,
       email: user.email,
       senha: "",
-      tipoUsuario: user.perfil.tipo_usuario,
+      tipoUsuario: user.tipo_usuario,
       empresasVinculadas: user.empresas.map(emp => emp.id),
       telasVinculadas,
       ativo: user.ativo
@@ -305,151 +293,57 @@ const Users = () => {
 
     try {
       if (isAddingUser) {
-        // 1. Criar usuário na autenticação
-        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-          email: formData.email,
-          password: formData.senha,
-          email_confirm: true,
-          user_metadata: {
-            nome: formData.nome,
-            tipo_usuario: formData.tipoUsuario
+        // Criar ou atualizar usuário via edge function
+        const { data, error } = await supabase.functions.invoke('manageUser', {
+          body: {
+            action: 'create',
+            userData: {
+              email: formData.email,
+              password: formData.senha,
+              user_metadata: {
+                nome: formData.nome,
+                tipo_usuario: formData.tipoUsuario
+              }
+            },
+            empresas: formData.empresasVinculadas,
+            telas: formData.telasVinculadas
           }
         });
 
-        if (authError) {
-          throw new Error(authError.message);
+        if (error) {
+          throw new Error(error.message);
         }
 
-        if (!authData.user) {
-          throw new Error("Erro ao criar usuário");
-        }
-
-        const userId = authData.user.id;
-
-        // 2. O trigger já deve ter criado o perfil, mas vamos atualizar os dados
-        const { error: perfilError } = await supabase
-          .from("perfis")
-          .update({
-            nome: formData.nome,
-            tipo_usuario: formData.tipoUsuario
-          })
-          .eq("id", userId);
-
-        if (perfilError) {
-          throw new Error("Erro ao atualizar perfil: " + perfilError.message);
-        }
-
-        // 3. Vincular empresas ao usuário
-        for (const empresaId of formData.empresasVinculadas) {
-          const { error: vincError } = await supabase
-            .from("usuario_empresas")
-            .insert({
-              usuario_id: userId,
-              empresa_id: empresaId
-            });
-
-          if (vincError) {
-            console.error("Erro ao vincular empresa:", vincError);
-          }
-        }
-
-        // 4. Vincular telas ao usuário
-        for (const tela of formData.telasVinculadas) {
-          if (tela.permissao_leitura) {
-            const { error: telaError } = await supabase
-              .from("acesso_telas")
-              .insert({
-                usuario_id: userId,
-                tela_id: tela.id,
-                permissao_leitura: tela.permissao_leitura,
-                permissao_escrita: tela.permissao_escrita,
-                permissao_exclusao: tela.permissao_exclusao
-              });
-
-            if (telaError) {
-              console.error("Erro ao vincular tela:", telaError);
-            }
-          }
+        if (!data.success) {
+          throw new Error(data.message || "Erro ao criar usuário");
         }
 
         toast.success("Usuário adicionado com sucesso!");
       } else if (editingUser) {
-        // 1. Atualizar perfil
-        const { error: perfilError } = await supabase
-          .from("perfis")
-          .update({
-            nome: formData.nome,
-            tipo_usuario: formData.tipoUsuario
-          })
-          .eq("id", editingUser.id);
-
-        if (perfilError) {
-          throw new Error("Erro ao atualizar perfil: " + perfilError.message);
-        }
-
-        // 2. Atualizar senha (se fornecida)
-        if (formData.senha) {
-          const { error: passwordError } = await supabase.auth.admin.updateUserById(
-            editingUser.id,
-            { password: formData.senha }
-          );
-
-          if (passwordError) {
-            throw new Error("Erro ao atualizar senha: " + passwordError.message);
+        // Atualizar usuário via edge function
+        const { data, error } = await supabase.functions.invoke('manageUser', {
+          body: {
+            action: 'update',
+            userId: editingUser.id,
+            userData: {
+              email: formData.email,
+              password: formData.senha || undefined,
+              user_metadata: {
+                nome: formData.nome,
+                tipo_usuario: formData.tipoUsuario
+              }
+            },
+            empresas: formData.empresasVinculadas,
+            telas: formData.telasVinculadas
           }
+        });
+
+        if (error) {
+          throw new Error(error.message);
         }
 
-        // 3. Remover todas as vinculações de empresas e adicionar as novas
-        const { error: deleteEmpresasError } = await supabase
-          .from("usuario_empresas")
-          .delete()
-          .eq("usuario_id", editingUser.id);
-
-        if (deleteEmpresasError) {
-          console.error("Erro ao limpar empresas vinculadas:", deleteEmpresasError);
-        }
-
-        // 4. Vincular as empresas selecionadas
-        for (const empresaId of formData.empresasVinculadas) {
-          const { error: vincEmpresaError } = await supabase
-            .from("usuario_empresas")
-            .insert({
-              usuario_id: editingUser.id,
-              empresa_id: empresaId
-            });
-
-          if (vincEmpresaError) {
-            console.error("Erro ao vincular empresa:", vincEmpresaError);
-          }
-        }
-
-        // 5. Remover todas as vinculações de telas e adicionar as novas
-        const { error: deleteTelaError } = await supabase
-          .from("acesso_telas")
-          .delete()
-          .eq("usuario_id", editingUser.id);
-
-        if (deleteTelaError) {
-          console.error("Erro ao limpar telas vinculadas:", deleteTelaError);
-        }
-
-        // 6. Vincular as telas selecionadas com suas permissões
-        for (const tela of formData.telasVinculadas) {
-          if (tela.permissao_leitura) {
-            const { error: telaError } = await supabase
-              .from("acesso_telas")
-              .insert({
-                usuario_id: editingUser.id,
-                tela_id: tela.id,
-                permissao_leitura: tela.permissao_leitura,
-                permissao_escrita: tela.permissao_escrita,
-                permissao_exclusao: tela.permissao_exclusao
-              });
-
-            if (telaError) {
-              console.error("Erro ao vincular tela:", telaError);
-            }
-          }
+        if (!data.success) {
+          throw new Error(data.message || "Erro ao atualizar usuário");
         }
 
         toast.success("Usuário atualizado com sucesso!");
@@ -469,7 +363,7 @@ const Users = () => {
   // Excluir usuário
   const handleDeleteUser = async (id: string) => {
     // Verificar se o usuário não está excluindo a si mesmo
-    if (id === usuarioAtual?.id) {
+    if (id === usuarioAtual?.id || id === currentUser?.id) {
       toast.error("Não é possível excluir seu próprio usuário");
       return;
     }
@@ -477,11 +371,19 @@ const Users = () => {
     if (confirm("Tem certeza que deseja excluir este usuário?")) {
       setIsLoading(true);
       try {
-        // Excluir o usuário da autenticação - as tabelas relacionadas serão excluídas por causa das constraints ON DELETE CASCADE
-        const { error } = await supabase.auth.admin.deleteUser(id);
+        const { data, error } = await supabase.functions.invoke('manageUser', {
+          body: {
+            action: 'delete',
+            userId: id
+          }
+        });
         
         if (error) {
           throw new Error(error.message);
+        }
+        
+        if (!data.success) {
+          throw new Error(data.message || "Erro ao excluir usuário");
         }
         
         toast.success("Usuário excluído com sucesso");
@@ -545,7 +447,8 @@ const Users = () => {
     });
   };
 
-  if (usuarioAtual?.tipo_usuario !== "admin") {
+  // Se não for admin, exibir mensagem de acesso restrito
+  if (!isAdmin) {
     return (
       <div className="flex items-center justify-center min-h-[80vh]">
         <Card className="max-w-md">
@@ -605,6 +508,11 @@ const Users = () => {
             <div className="flex justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-sidebar-accent"></div>
             </div>
+          ) : usuarios.length === 0 ? (
+            <div className="text-center py-6 text-muted-foreground">
+              <p>Nenhum usuário encontrado. Use funções Edge para administração de usuários.</p>
+              <p className="text-sm mt-2">Esta funcionalidade requer configuração de Edge Functions no Supabase.</p>
+            </div>
           ) : (
             <div className="rounded-md border">
               <Table>
@@ -621,24 +529,28 @@ const Users = () => {
                   {filteredUsers.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
-                        Nenhum usuário encontrado
+                        Nenhum usuário encontrado com o termo de busca
                       </TableCell>
                     </TableRow>
                   ) : (
                     filteredUsers.map((usuario) => (
                       <TableRow key={usuario.id}>
-                        <TableCell className="font-medium">{usuario.perfil.nome}</TableCell>
+                        <TableCell className="font-medium">{usuario.nome}</TableCell>
                         <TableCell>{usuario.email}</TableCell>
                         <TableCell>
-                          {usuario.perfil.tipo_usuario === "admin" ? "Administrador" : "Usuário Normal"}
+                          {usuario.tipo_usuario === "admin" ? "Administrador" : "Usuário Normal"}
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col">
-                            {usuario.empresas.map((emp) => (
-                              <span key={emp.id} className="text-sm">
-                                {emp.nome}
-                              </span>
-                            ))}
+                            {usuario.empresas.length > 0 ? (
+                              usuario.empresas.map((emp) => (
+                                <span key={emp.id} className="text-sm">
+                                  {emp.nome}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-sm text-muted-foreground">Sem empresas vinculadas</span>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="text-right">

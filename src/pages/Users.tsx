@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -102,78 +101,51 @@ const Users = () => {
 
   const isAdmin = currentUser?.user_metadata?.tipo_usuario === 'admin' || usuarioAtual?.tipo_usuario === 'admin';
 
-  // Função para carregar próximo lote de empresas
-  const carregarMaisEmpresas = useCallback(async () => {
-    if (!empresasPagination.hasMore || empresasPagination.loading) return;
-    
-    setEmpresasPagination(prev => ({ ...prev, loading: true }));
-    try {
-      console.log(`Carregando lote de empresas: página ${empresasPagination.page + 1}, limite ${empresasPagination.limit}`);
-      
-      const { data, error, count } = await supabase
-        .from("empresas")
-        .select("id, nome, cnpj", { count: 'exact' })
-        .range(
-          empresasPagination.page * empresasPagination.limit, 
-          (empresasPagination.page + 1) * empresasPagination.limit - 1
-        )
-        .order('nome', { ascending: true });
-      
-      if (error) {
-        console.error(`Erro ao carregar empresas (página ${empresasPagination.page + 1}):`, error);
-        toast.error(`Erro ao carregar empresas: ${error.message}`);
-        throw error;
-      }
-      
-      if (data && data.length > 0) {
-        console.log(`Carregadas ${data.length} empresas na página ${empresasPagination.page + 1}`);
-        // Adicionar apenas empresas que não existem no array atual (para evitar duplicações)
-        setEmpresas(prev => {
-          const idsAtuais = new Set(prev.map(empresa => empresa.id));
-          const novasEmpresas = data.filter(empresa => !idsAtuais.has(empresa.id));
-          return [...prev, ...novasEmpresas];
-        });
-        
-        // Verificar se há mais páginas para carregar
-        const hasMore = data.length === empresasPagination.limit;
-        setEmpresasPagination(prev => ({
-          ...prev, 
-          page: prev.page + 1,
-          hasMore
-        }));
-        
-        console.log(`Ainda há mais empresas para carregar: ${hasMore}`);
-      } else {
-        console.log("Nenhuma empresa encontrada ou fim da paginação");
-        setEmpresasPagination(prev => ({ ...prev, hasMore: false }));
-      }
-      
-      return data;
-    } catch (error) {
-      console.error("Erro ao carregar empresas:", error);
-      return null;
-    } finally {
-      setEmpresasPagination(prev => ({ ...prev, loading: false }));
-    }
-  }, [empresasPagination.page, empresasPagination.limit, empresasPagination.hasMore, empresasPagination.loading]);
-
-  // Função para carregar todas as empresas
+  // Função para carregar empresas via Edge Function para evitar problemas de RLS
   const carregarEmpresas = async () => {
     setLoadingEmpresas(true);
-    setEmpresasPagination({
-      page: 0,
-      limit: 100,
-      loading: false,
-      hasMore: true
-    });
     setEmpresas([]);
     
     try {
-      console.log("Iniciando carregamento de empresas...");
-      await carregarMaisEmpresas();
-    } catch (error) {
-      console.error("Erro ao iniciar carregamento de empresas:", error);
-      toast.error(`Erro ao carregar empresas: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      console.log("Carregando empresas via Edge Function...");
+      const { data: empresasData, error: empresasError } = await supabase.functions.invoke('getEmpresas', {
+        body: {}
+      });
+      
+      if (empresasError) {
+        throw empresasError;
+      }
+      
+      if (empresasData && Array.isArray(empresasData.empresas)) {
+        console.log(`Empresas carregadas via Edge Function: ${empresasData.empresas.length}`);
+        setEmpresas(empresasData.empresas);
+        return;
+      }
+    } catch (edgeFunctionError) {
+      console.error("Erro ao buscar empresas via Edge Function:", edgeFunctionError);
+      console.log("Tentando método alternativo para buscar empresas...");
+      
+      try {
+        // Fallback: busca direta sem joins para evitar recursão
+        const { data: directEmpresasData, error: directEmpresasError } = await supabase
+          .from("empresas")
+          .select("id, nome, cnpj")
+          .order('nome', { ascending: true });
+          
+        if (directEmpresasError) {
+          console.error("Erro ao buscar empresas diretamente:", directEmpresasError);
+          toast.error("Não foi possível carregar as empresas. Por favor, tente novamente mais tarde.");
+          return;
+        }
+        
+        if (directEmpresasData) {
+          console.log(`Empresas carregadas diretamente: ${directEmpresasData.length}`);
+          setEmpresas(directEmpresasData);
+        }
+      } catch (error) {
+        console.error("Erro no fallback de empresas:", error);
+        toast.error(`Não foi possível carregar as empresas: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      }
     } finally {
       setLoadingEmpresas(false);
     }
@@ -260,30 +232,6 @@ const Users = () => {
 
     loadData();
   }, [isAdmin, currentUser]);
-
-  // Monitorar o scroll da lista de empresas para carregar mais quando necessário
-  useEffect(() => {
-    const handleScroll = (entries: IntersectionObserverEntry[]) => {
-      const [entry] = entries;
-      if (entry.isIntersecting && empresasPagination.hasMore && !empresasPagination.loading) {
-        carregarMaisEmpresas();
-      }
-    };
-
-    // Criar um observer para detectar quando o usuário rola até o final da lista
-    const observer = new IntersectionObserver(handleScroll, { threshold: 0.5 });
-    const loadMoreTrigger = document.getElementById('load-more-empresas');
-    
-    if (loadMoreTrigger) {
-      observer.observe(loadMoreTrigger);
-    }
-
-    return () => {
-      if (loadMoreTrigger) {
-        observer.unobserve(loadMoreTrigger);
-      }
-    };
-  }, [carregarMaisEmpresas, empresasPagination.hasMore, empresasPagination.loading]);
 
   const filteredUsers = usuarios.filter(usuario =>
     usuario.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -562,15 +510,6 @@ const Users = () => {
             isAddingUser={isAddingUser}
             loadingEmpresas={loadingEmpresas}
           />
-          
-          {/* Elemento invisível para detectar quando o usuário rolou até o fim da lista de empresas */}
-          <div id="load-more-empresas" className="h-1" />
-          
-          {empresasPagination.loading && (
-            <div className="flex justify-center p-2">
-              <Loader2 className="animate-spin h-5 w-5 text-muted-foreground" />
-            </div>
-          )}
           
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>

@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { toast } from "sonner";
@@ -94,7 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Buscar empresas do usuário
+  // Buscar empresas do usuário usando Edge Function para evitar problemas de RLS recursivo
   const fetchEmpresas = async (userId: string) => {
     try {
       console.log("Buscando empresas para userId:", userId);
@@ -106,97 +105,60 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!perfil && user) {
         const isAdminByMetadata = user.user_metadata.tipo_usuario === 'admin';
         console.log("Verificação admin via metadados:", isAdminByMetadata);
-        
-        if (isAdminByMetadata) {
-          // Se for admin pelos metadados, buscar todas as empresas
-          const { data, error } = await supabase
-            .from("empresas")
-            .select("id, nome, cnpj, razao_social, nome_abreviado, endereco, cidade, uf");
-            
-          if (error) {
-            console.error("Erro ao buscar empresas:", error);
-            return;
-          }
-          
-          console.log("Empresas encontradas (admin via metadados):", data);
-          setEmpresas(data || []);
-          
-          // Definir empresa atual se não estiver definida
-          if (!empresaAtual && data && data.length > 0) {
-            setEmpresaAtual(data[0]);
-            localStorage.setItem("empresaAtual", JSON.stringify(data[0]));
-          }
-          return;
-        }
       }
       
-      // Se já tem perfil definido
-      if (isAdmin) {
-        // Se for admin, pega todas as empresas
-        const { data, error } = await supabase
+      try {
+        // Usar Edge Function para buscar empresas e evitar o erro de recursão em RLS
+        console.log("Buscando empresas via Edge Function...");
+        const { data: empresasData, error: empresasError } = await supabase.functions.invoke('getEmpresas', {
+          body: {}
+        });
+        
+        if (empresasError) {
+          throw empresasError;
+        }
+        
+        if (empresasData && Array.isArray(empresasData.empresas)) {
+          console.log(`Empresas carregadas via Edge Function: ${empresasData.empresas.length}`);
+          setEmpresas(empresasData.empresas);
+          
+          // Definir empresa atual se não estiver definida
+          if (!empresaAtual && empresasData.empresas.length > 0) {
+            setEmpresaAtual(empresasData.empresas[0]);
+            localStorage.setItem("empresaAtual", JSON.stringify(empresasData.empresas[0]));
+          }
+          
+          return;
+        }
+      } catch (edgeFunctionError) {
+        console.error("Erro ao buscar empresas via Edge Function:", edgeFunctionError);
+        console.log("Tentando método alternativo para buscar empresas...");
+        
+        // Fallback: realizar busca direta nas empresas sem joins que podem causar recursão
+        const { data: directEmpresasData, error: directEmpresasError } = await supabase
           .from("empresas")
           .select("id, nome, cnpj, razao_social, nome_abreviado, endereco, cidade, uf");
           
-        if (error) {
-          console.error("Erro ao buscar empresas:", error);
+        if (directEmpresasError) {
+          console.error("Erro ao buscar empresas diretamente:", directEmpresasError);
+          toast.error("Não foi possível carregar as empresas. Por favor, tente novamente mais tarde.");
           return;
         }
         
-        console.log("Empresas encontradas (admin):", data);
-        setEmpresas(data || []);
-        
-        // Definir empresa atual se não estiver definida
-        if (!empresaAtual && data && data.length > 0) {
-          setEmpresaAtual(data[0]);
-          localStorage.setItem("empresaAtual", JSON.stringify(data[0]));
-        }
-      } else {
-        // Se for usuário normal, pega só as empresas vinculadas
-        const { data, error } = await supabase
-          .from("usuario_empresas")
-          .select(`
-            empresa_id,
-            empresas:empresa_id(
-              id,
-              nome,
-              cnpj,
-              razao_social,
-              nome_abreviado,
-              endereco,
-              cidade,
-              uf
-            )
-          `)
-          .eq("usuario_id", userId);
+        if (directEmpresasData) {
+          console.log(`Empresas carregadas diretamente: ${directEmpresasData.length}`);
+          setEmpresas(directEmpresasData);
           
-        if (error) {
-          console.error("Erro ao buscar empresas vinculadas:", error);
-          return;
-        }
-        
-        // Transformar formato para usuários normais
-        const empresasData = data?.map(item => ({
-          id: item.empresas.id,
-          nome: item.empresas.nome,
-          cnpj: item.empresas.cnpj,
-          razao_social: item.empresas.razao_social,
-          nome_abreviado: item.empresas.nome_abreviado,
-          endereco: item.empresas.endereco,
-          cidade: item.empresas.cidade,
-          uf: item.empresas.uf
-        })) || [];
-        
-        console.log("Empresas encontradas (usuário normal):", empresasData);
-        setEmpresas(empresasData);
-        
-        // Definir empresa atual se não estiver definida
-        if (!empresaAtual && empresasData.length > 0) {
-          setEmpresaAtual(empresasData[0]);
-          localStorage.setItem("empresaAtual", JSON.stringify(empresasData[0]));
+          // Definir empresa atual se não estiver definida
+          if (!empresaAtual && directEmpresasData.length > 0) {
+            setEmpresaAtual(directEmpresasData[0]);
+            localStorage.setItem("empresaAtual", JSON.stringify(directEmpresasData[0]));
+          }
         }
       }
     } catch (error) {
       console.error("Erro ao buscar empresas:", error);
+      toast.error("Não foi possível carregar as empresas. Por favor, tente novamente mais tarde.");
     }
   };
 

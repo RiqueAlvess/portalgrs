@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -74,7 +73,6 @@ export const UserForm: React.FC<UserFormProps> = ({
   const [filteredTelas, setFilteredTelas] = useState<Tela[]>(telas);
   const [selectAllEnabled, setSelectAllEnabled] = useState(true);
 
-  // Atualizar empresas filtradas quando a busca mudar ou quando as empresas carregarem
   useEffect(() => {
     if (empresas.length > 0) {
       if (!empresasSearch) {
@@ -91,7 +89,6 @@ export const UserForm: React.FC<UserFormProps> = ({
     }
   }, [empresasSearch, empresas]);
 
-  // Atualizar telas filtradas quando a busca mudar ou quando as telas carregarem
   useEffect(() => {
     if (telas.length > 0) {
       if (!telasSearch) {
@@ -153,7 +150,6 @@ export const UserForm: React.FC<UserFormProps> = ({
   };
 
   const selectAllEmpresas = () => {
-    // Proteger contra seleções muito grandes que podem causar problemas de desempenho
     if (filteredEmpresas.length > 500 && selectAllEnabled) {
       setSelectAllEnabled(false);
       toast.warning("Muitas empresas para selecionar de uma vez (mais de 500). Refine sua busca.");
@@ -186,7 +182,6 @@ export const UserForm: React.FC<UserFormProps> = ({
           newTelasVinculadas[telaIndex] = {
             ...newTelasVinculadas[telaIndex],
             [type]: true,
-            // Se estamos dando permissão de escrita ou exclusão, garantir que também tem leitura
             ...(type !== 'permissao_leitura' ? { permissao_leitura: true } : {})
           };
         }
@@ -246,7 +241,7 @@ export const UserForm: React.FC<UserFormProps> = ({
         </Label>
         <Select
           value={formData.tipoUsuario}
-          onValueChange={(value) => setFormData({...formData, tipoUsuario: value as "admin" | "normal"})}
+          onValueChange={(value: "admin" | "normal") => setFormData({...formData, tipoUsuario: value})}
         >
           <SelectTrigger className="col-span-3">
             <SelectValue placeholder="Selecione um tipo" />

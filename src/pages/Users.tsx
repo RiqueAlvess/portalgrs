@@ -50,6 +50,22 @@ interface Empresa {
   cnpj: string;
 }
 
+// Define the correct FormData interface to match what's used in the UserForm component
+interface FormData {
+  nome: string;
+  email: string;
+  senha: string;
+  tipoUsuario: "admin" | "normal"; // This is the key fix - restricting to only these two values
+  empresasVinculadas: string[];
+  telasVinculadas: {
+    id: string; 
+    permissao_leitura: boolean; 
+    permissao_escrita: boolean; 
+    permissao_exclusao: boolean;
+  }[];
+  ativo: boolean;
+}
+
 const Users = () => {
   const { user: currentUser, perfil: usuarioAtual } = useAuth();
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
@@ -69,11 +85,11 @@ const Users = () => {
     hasMore: true
   });
   
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     nome: "",
     email: "",
     senha: "",
-    tipoUsuario: "normal",
+    tipoUsuario: "normal", // Explicitly set as "normal" to match the union type
     empresasVinculadas: [] as string[],
     telasVinculadas: [] as {
       id: string; 
@@ -270,7 +286,7 @@ const Users = () => {
   }, [carregarMaisEmpresas, empresasPagination.hasMore, empresasPagination.loading]);
 
   const filteredUsers = usuarios.filter(usuario =>
-    usuario.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    usuario.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     usuario.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -286,7 +302,7 @@ const Users = () => {
       nome: "",
       email: "",
       senha: "",
-      tipoUsuario: "normal",
+      tipoUsuario: "normal", // Ensure this is explicitly "normal"
       empresasVinculadas: [],
       telasVinculadas: telasIniciais,
       ativo: true
@@ -311,7 +327,7 @@ const Users = () => {
       nome: user.nome,
       email: user.email,
       senha: "",
-      tipoUsuario: user.tipo_usuario,
+      tipoUsuario: user.tipo_usuario, // This must be "admin" or "normal"
       empresasVinculadas: user.empresas.map(emp => emp.id),
       telasVinculadas,
       ativo: user.ativo

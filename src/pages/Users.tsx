@@ -49,12 +49,11 @@ interface Empresa {
   cnpj: string;
 }
 
-// Define the correct FormData interface to match what's used in the UserForm component
 interface FormData {
   nome: string;
   email: string;
   senha: string;
-  tipoUsuario: "admin" | "normal"; // This is the key fix - restricting to only these two values
+  tipoUsuario: "admin" | "normal";
   empresasVinculadas: string[];
   telasVinculadas: {
     id: string; 
@@ -88,7 +87,7 @@ const Users = () => {
     nome: "",
     email: "",
     senha: "",
-    tipoUsuario: "normal", // Explicitly set as "normal" to match the union type
+    tipoUsuario: "normal",
     empresasVinculadas: [] as string[],
     telasVinculadas: [] as {
       id: string; 
@@ -101,32 +100,55 @@ const Users = () => {
 
   const isAdmin = currentUser?.user_metadata?.tipo_usuario === 'admin' || usuarioAtual?.tipo_usuario === 'admin';
 
-  // Função para carregar empresas via Edge Function para evitar problemas de RLS
   const carregarEmpresas = async () => {
     setLoadingEmpresas(true);
     setEmpresas([]);
     
     try {
       console.log("Carregando empresas via Edge Function...");
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      
+      if (!token) {
+        throw new Error("Sem token de autenticação");
+      }
+      
       const { data: empresasData, error: empresasError } = await supabase.functions.invoke('getEmpresas', {
-        body: {}
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        body: {
+          page: empresasPagination.page + 1,
+          perPage: empresasPagination.limit
+        }
       });
       
       if (empresasError) {
+        console.error("Erro na resposta da Edge Function:", empresasError);
         throw empresasError;
       }
       
-      if (empresasData && Array.isArray(empresasData.empresas)) {
+      if (empresasData && empresasData.success && Array.isArray(empresasData.empresas)) {
         console.log(`Empresas carregadas via Edge Function: ${empresasData.empresas.length}`);
-        setEmpresas(empresasData.empresas);
-        return;
+        
+        const hasMore = empresasData.empresas.length === empresasPagination.limit;
+        
+        setEmpresas(prev => [...prev, ...empresasData.empresas]);
+        setEmpresasPagination(prev => ({
+          ...prev,
+          page: prev.page + 1,
+          hasMore: hasMore
+        }));
+      } else {
+        console.error("Formato de resposta inválido:", empresasData);
+        throw new Error("Formato de resposta inválido");
       }
-    } catch (edgeFunctionError) {
-      console.error("Erro ao buscar empresas via Edge Function:", edgeFunctionError);
-      console.log("Tentando método alternativo para buscar empresas...");
+    } catch (error) {
+      console.error("Erro ao carregar empresas:", error);
+      toast.error("Não foi possível carregar as empresas. Por favor, tente novamente mais tarde.");
       
       try {
-        // Fallback: busca direta sem joins para evitar recursão
         const { data: directEmpresasData, error: directEmpresasError } = await supabase
           .from("empresas")
           .select("id, nome, cnpj")
@@ -134,7 +156,6 @@ const Users = () => {
           
         if (directEmpresasError) {
           console.error("Erro ao buscar empresas diretamente:", directEmpresasError);
-          toast.error("Não foi possível carregar as empresas. Por favor, tente novamente mais tarde.");
           return;
         }
         
@@ -142,16 +163,14 @@ const Users = () => {
           console.log(`Empresas carregadas diretamente: ${directEmpresasData.length}`);
           setEmpresas(directEmpresasData);
         }
-      } catch (error) {
-        console.error("Erro no fallback de empresas:", error);
-        toast.error(`Não foi possível carregar as empresas: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      } catch (fallbackError) {
+        console.error("Erro no fallback de empresas:", fallbackError);
       }
     } finally {
       setLoadingEmpresas(false);
     }
   };
 
-  // Função para carregar todas as telas
   const carregarTelas = async () => {
     try {
       console.log("Carregando todas as telas...");
@@ -178,7 +197,6 @@ const Users = () => {
     }
   };
 
-  // Função para carregar usuários
   const carregarUsuarios = async () => {
     setIsLoading(true);
     setLoadError(null);
@@ -216,7 +234,6 @@ const Users = () => {
         try {
           console.log("Carregando dados da página de usuários...");
           
-          // Carregar empresas e telas em paralelo
           await Promise.all([
             carregarEmpresas(),
             carregarTelas(),
@@ -250,7 +267,7 @@ const Users = () => {
       nome: "",
       email: "",
       senha: "",
-      tipoUsuario: "normal", // Ensure this is explicitly "normal"
+      tipoUsuario: "normal",
       empresasVinculadas: [],
       telasVinculadas: telasIniciais,
       ativo: true
@@ -275,7 +292,7 @@ const Users = () => {
       nome: user.nome,
       email: user.email,
       senha: "",
-      tipoUsuario: user.tipo_usuario, // This must be "admin" or "normal"
+      tipoUsuario: user.tipo_usuario,
       empresasVinculadas: user.empresas.map(emp => emp.id),
       telasVinculadas,
       ativo: user.ativo
@@ -366,7 +383,6 @@ const Users = () => {
         toast.success("Usuário atualizado com sucesso!");
       }
 
-      // Recarregar dados
       await carregarUsuarios();
       setIsDialogOpen(false);
     } catch (error) {

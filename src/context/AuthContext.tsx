@@ -42,30 +42,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [empresaAtual, setEmpresaAtual] = useState<Empresa | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Buscar perfil do usuário diretamente dos metadados do usuário autenticado
   const fetchPerfil = async (usuario: User) => {
     try {
       console.log("Buscando perfil para usuário:", usuario.email);
       
-      // Extrair as informações diretamente dos metadados do usuário
       const userMetadata = usuario.user_metadata;
       
       if (userMetadata) {
         console.log("Metadados do usuário:", userMetadata);
         
-        // Usar os dados dos metadados para definir o perfil
         setPerfil({
           id: usuario.id,
           nome: userMetadata.nome || userMetadata.full_name || usuario.email,
           tipo_usuario: userMetadata.tipo_usuario === "admin" ? "admin" : "normal",
         });
         
-        // Log para depuração
         console.log(`Tipo de usuário detectado: ${userMetadata.tipo_usuario || 'normal'}`);
       } else {
         console.log("Nenhum metadado encontrado para este usuário");
         
-        // Fallback: verificar na tabela de perfis
         const { data, error } = await supabase
           .from("perfis")
           .select("*")
@@ -93,68 +88,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Buscar empresas do usuário usando Edge Function para evitar problemas de RLS recursivo
   const fetchEmpresas = async (userId: string) => {
     try {
       console.log("Buscando empresas para userId:", userId);
       
-      // Verificar se o usuário é admin pelo perfil
       const isAdmin = perfil?.tipo_usuario === 'admin';
+      const isAdminByMetadata = user?.user_metadata?.tipo_usuario === 'admin';
       
-      // Se não tiver perfil definido ainda, fazer uma verificação nos metadados
-      if (!perfil && user) {
-        const isAdminByMetadata = user.user_metadata.tipo_usuario === 'admin';
-        console.log("Verificação admin via metadados:", isAdminByMetadata);
-      }
+      console.log("Status admin:", { 
+        viaMetadata: isAdminByMetadata, 
+        viaPerfil: isAdmin 
+      });
       
       try {
-        // Usar Edge Function para buscar empresas e evitar o erro de recursão em RLS
-        console.log("Buscando empresas via Edge Function...");
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        
+        if (!token) {
+          throw new Error("Sem token de autenticação");
+        }
+        
         const { data: empresasData, error: empresasError } = await supabase.functions.invoke('getEmpresas', {
-          body: {}
+          headers: {
+            Authorization: `Bearer ${token}`
+          },
+          body: {
+            page: 1,
+            perPage: 500
+          }
         });
         
         if (empresasError) {
+          console.error("Erro na resposta da Edge Function:", empresasError);
           throw empresasError;
         }
         
-        if (empresasData && Array.isArray(empresasData.empresas)) {
+        if (empresasData && empresasData.success && Array.isArray(empresasData.empresas)) {
           console.log(`Empresas carregadas via Edge Function: ${empresasData.empresas.length}`);
           setEmpresas(empresasData.empresas);
           
-          // Definir empresa atual se não estiver definida
           if (!empresaAtual && empresasData.empresas.length > 0) {
             setEmpresaAtual(empresasData.empresas[0]);
             localStorage.setItem("empresaAtual", JSON.stringify(empresasData.empresas[0]));
           }
           
           return;
+        } else {
+          console.error("Formato de resposta inválido:", empresasData);
+          throw new Error("Formato de resposta inválido");
         }
       } catch (edgeFunctionError) {
         console.error("Erro ao buscar empresas via Edge Function:", edgeFunctionError);
-        console.log("Tentando método alternativo para buscar empresas...");
-        
-        // Fallback: realizar busca direta nas empresas sem joins que podem causar recursão
-        const { data: directEmpresasData, error: directEmpresasError } = await supabase
-          .from("empresas")
-          .select("id, nome, cnpj, razao_social, nome_abreviado, endereco, cidade, uf");
-          
-        if (directEmpresasError) {
-          console.error("Erro ao buscar empresas diretamente:", directEmpresasError);
-          toast.error("Não foi possível carregar as empresas. Por favor, tente novamente mais tarde.");
-          return;
-        }
-        
-        if (directEmpresasData) {
-          console.log(`Empresas carregadas diretamente: ${directEmpresasData.length}`);
-          setEmpresas(directEmpresasData);
-          
-          // Definir empresa atual se não estiver definida
-          if (!empresaAtual && directEmpresasData.length > 0) {
-            setEmpresaAtual(directEmpresasData[0]);
-            localStorage.setItem("empresaAtual", JSON.stringify(directEmpresasData[0]));
-          }
-        }
+        toast.error("Erro ao carregar empresas. Verifique os logs para mais detalhes.");
       }
     } catch (error) {
       console.error("Erro ao buscar empresas:", error);
@@ -162,16 +147,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Efeito para carregar sessão do usuário
   useEffect(() => {
-    // Verificar sessão existente no carregamento
     const loadSession = async () => {
       setIsLoading(true);
       
       try {
         console.log("Inicializando verificação de autenticação");
         
-        // Configurar listener para mudanças na autenticação
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           (event, currentSession) => {
             console.log("Evento de auth state change:", event);
@@ -182,12 +164,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               console.log("Usuário autenticado:", currentSession.user.email);
               console.log("Metadados:", currentSession.user.user_metadata);
               
-              // Usar setTimeout para evitar problemas de lock com Supabase
               setTimeout(() => {
                 fetchPerfil(currentSession.user);
               }, 0);
               
-              // Buscar empresas depois de definir o perfil
               setTimeout(() => {
                 fetchEmpresas(currentSession.user.id);
               }, 100);
@@ -200,30 +180,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         );
         
-        // Verificar se já existe uma sessão
         const { data: { session: currentSession } } = await supabase.auth.getSession();
         console.log("Sessão atual:", currentSession ? "Existe" : "Não existe");
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
         
         if (currentSession?.user) {
-          // Imprimir dados do usuário para depuração
           console.log("Dados completos do usuário:", currentSession.user);
           console.log("Metadados do usuário:", currentSession.user.user_metadata);
           
           await fetchPerfil(currentSession.user);
           
-          // Verificar se há empresa atual no localStorage
           const storedEmpresa = localStorage.getItem("empresaAtual");
           if (storedEmpresa) {
             setEmpresaAtual(JSON.parse(storedEmpresa));
           }
           
-          // Buscar empresas depois do perfil
           await fetchEmpresas(currentSession.user.id);
         }
         
-        // Adicionar cleanup para o subscription
         return () => {
           subscription?.unsubscribe();
         };
@@ -234,16 +209,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
     
-    // Executar loadSession e capturar a função de limpeza
     const cleanup = loadSession();
     
-    // Retornar função de limpeza para o useEffect
     return () => {
-      // Usar uma IIFE async para chamar o cleanup de forma segura
       (async () => {
         if (cleanup) {
           try {
-            // Esperar pela função de limpeza (se for uma Promise)
             await cleanup;
           } catch (error) {
             console.error("Erro no cleanup:", error);
@@ -253,7 +224,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Login com Supabase
   const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true);
     try {
@@ -267,14 +237,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) {
         console.error("Erro de login:", error);
         
-        // Mensagens de erro mais específicas
         if (error.message.includes("Invalid login credentials")) {
           toast.error("Credenciais inválidas. Verifique seu email e senha.");
         } else {
           toast.error(error.message || "Falha no login. Por favor, tente novamente.");
         }
         
-        throw error; // Lançar erro para ser capturado pelo componente Login
+        throw error;
       }
 
       if (data.user) {
@@ -288,14 +257,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return false;
     } catch (error) {
       console.error("Erro de login:", error);
-      // Não mostrar toast aqui, deixar o componente Login tratar o erro
-      throw error; // Relançar o erro para o componente Login
+      throw error;
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Logout com Supabase
   const logout = async () => {
     try {
       await supabase.auth.signOut();
@@ -311,7 +278,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Mudar empresa atual
   const mudarEmpresa = (empresa: Empresa) => {
     setEmpresaAtual(empresa);
     localStorage.setItem("empresaAtual", JSON.stringify(empresa));

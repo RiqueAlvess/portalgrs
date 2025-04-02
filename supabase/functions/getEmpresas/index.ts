@@ -67,10 +67,12 @@ serve(async (req) => {
     }
 
     // Buscar todas as empresas sem aplicar RLS
+    console.log("Fetching all empresas with admin privileges");
     const { data: empresas, error: empresasError } = await supabase
       .from("empresas")
       .select("id, nome, cnpj, razao_social, nome_abreviado, endereco, cidade, uf")
-      .order("nome", { ascending: true });
+      .order("nome", { ascending: true })
+      .range((page - 1) * perPage, page * perPage - 1);
 
     if (empresasError) {
       console.error("Error fetching empresas:", empresasError);
@@ -84,6 +86,8 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         empresas: empresas || [],
+        page: page,
+        perPage: perPage
       }),
       {
         headers: { 

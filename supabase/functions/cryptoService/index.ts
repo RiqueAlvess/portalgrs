@@ -131,6 +131,59 @@ async function decryptData(encryptedData: string): Promise<string> {
   }
 }
 
+// Encriptar arquivo
+async function encryptFile(fileData: { content: string, filename: string, type: string }): Promise<{ content: string, metadata: string }> {
+  try {
+    // Processar os metadados do arquivo (nome e tipo)
+    const metadata = JSON.stringify({
+      filename: fileData.filename,
+      type: fileData.type
+    });
+    
+    // Criptografar os metadados
+    const encryptedMetadata = await encryptData(metadata);
+    
+    // Criptografar o conteúdo do arquivo (já está em base64)
+    const encryptedContent = await encryptData(fileData.content);
+    
+    return {
+      content: encryptedContent,
+      metadata: encryptedMetadata
+    };
+  } catch (error) {
+    console.error("Erro na criptografia do arquivo:", error);
+    throw error;
+  }
+}
+
+// Descriptografar arquivo
+async function decryptFile(encryptedFileData: string): Promise<{ content: string, filename: string, type: string }> {
+  try {
+    // O formato esperado é: [encryptedMetadata].[encryptedContent]
+    const parts = encryptedFileData.split('.');
+    
+    if (parts.length !== 2) {
+      throw new Error("Formato de arquivo criptografado inválido");
+    }
+    
+    // Descriptografar os metadados
+    const decryptedMetadata = await decryptData(parts[0]);
+    const metadata = JSON.parse(decryptedMetadata);
+    
+    // Descriptografar o conteúdo
+    const decryptedContent = await decryptData(parts[1]);
+    
+    return {
+      content: decryptedContent,
+      filename: metadata.filename,
+      type: metadata.type
+    };
+  } catch (error) {
+    console.error("Erro na descriptografia do arquivo:", error);
+    throw error;
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight request
   if (req.method === "OPTIONS") {
@@ -201,6 +254,37 @@ serve(async (req) => {
         result = {
           success: true,
           result: decryptedData
+        };
+        break;
+
+      case "encryptFile":
+        if (!data) {
+          throw new Error("Arquivo para criptografar não fornecido");
+        }
+        
+        const encryptedFile = await encryptFile(data);
+        // Formato: [encryptedMetadata].[encryptedContent]
+        const encryptedFileResult = encryptedFile.metadata + '.' + encryptedFile.content;
+        
+        result = {
+          success: true,
+          result: {
+            content: encryptedFileResult,
+            type: 'application/octet-stream',
+            filename: data.filename + '.encrypted'
+          }
+        };
+        break;
+        
+      case "decryptFile":
+        if (!data) {
+          throw new Error("Arquivo para descriptografar não fornecido");
+        }
+        
+        const decryptedFile = await decryptFile(data);
+        result = {
+          success: true,
+          result: decryptedFile
         };
         break;
         

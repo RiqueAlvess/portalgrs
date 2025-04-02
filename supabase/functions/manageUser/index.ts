@@ -125,18 +125,27 @@ serve(async (req) => {
 
         // Vincular empresas se fornecidas
         if (empresas && Array.isArray(empresas) && empresas.length > 0) {
-          console.log("Linking companies to user...", empresas);
-          for (const empresaId of empresas) {
-            console.log(`Vinculando empresa ${empresaId} ao usuário ${createData.user.id}`);
-            const { error: empresaError } = await supabase
+          console.log(`Vinculando ${empresas.length} empresas ao usuário ${createData.user.id}`);
+          
+          // Preparar lotes para inserção em massa 
+          // (no máximo 50 por vez para evitar problemas de tamanho de payload)
+          const batchSize = 50;
+          
+          for (let i = 0; i < empresas.length; i += batchSize) {
+            const batch = empresas.slice(i, i + batchSize);
+            console.log(`Processando lote de empresas ${i+1} até ${Math.min(i+batchSize, empresas.length)} de ${empresas.length}`);
+            
+            const empresasData = batch.map(empresaId => ({
+              usuario_id: createData.user.id,
+              empresa_id: empresaId
+            }));
+            
+            const { error: empresaBatchError } = await supabase
               .from("usuario_empresas")
-              .insert({
-                usuario_id: createData.user.id,
-                empresa_id: empresaId
-              });
-
-            if (empresaError) {
-              console.error(`Erro ao vincular empresa ${empresaId}:`, empresaError);
+              .insert(empresasData);
+            
+            if (empresaBatchError) {
+              console.error(`Erro ao vincular lote de empresas:`, empresaBatchError);
             }
           }
         } else {
@@ -145,23 +154,32 @@ serve(async (req) => {
 
         // Vincular telas se fornecidas
         if (telas && Array.isArray(telas) && telas.length > 0) {
-          console.log("Linking screens to user...", telas.length);
-          for (const tela of telas) {
-            if (tela.permissao_leitura) {
-              console.log(`Vinculando tela ${tela.id} ao usuário ${createData.user.id}`);
-              const { error: telaError } = await supabase
-                .from("acesso_telas")
-                .insert({
-                  usuario_id: createData.user.id,
-                  tela_id: tela.id,
-                  permissao_leitura: tela.permissao_leitura,
-                  permissao_escrita: tela.permissao_escrita,
-                  permissao_exclusao: tela.permissao_exclusao
-                });
-
-              if (telaError) {
-                console.error(`Erro ao vincular tela ${tela.id}:`, telaError);
-              }
+          console.log(`Vinculando ${telas.length} telas ao usuário ${createData.user.id}`);
+          
+          // Filtrar apenas telas com permissão de leitura
+          const telasComPermissao = telas.filter(tela => tela.permissao_leitura);
+          
+          // Preparar lotes para inserção em massa
+          const batchSize = 50;
+          
+          for (let i = 0; i < telasComPermissao.length; i += batchSize) {
+            const batch = telasComPermissao.slice(i, i + batchSize);
+            console.log(`Processando lote de telas ${i+1} até ${Math.min(i+batchSize, telasComPermissao.length)} de ${telasComPermissao.length}`);
+            
+            const telasData = batch.map(tela => ({
+              usuario_id: createData.user.id,
+              tela_id: tela.id,
+              permissao_leitura: tela.permissao_leitura,
+              permissao_escrita: tela.permissao_escrita,
+              permissao_exclusao: tela.permissao_exclusao
+            }));
+            
+            const { error: telaBatchError } = await supabase
+              .from("acesso_telas")
+              .insert(telasData);
+            
+            if (telaBatchError) {
+              console.error(`Erro ao vincular lote de telas:`, telaBatchError);
             }
           }
         } else {
@@ -227,9 +245,9 @@ serve(async (req) => {
         }
 
         // Atualizar empresas vinculadas
-        if (empresas) {
+        if (empresas !== undefined) {
           console.log("Updating company links...");
-          console.log("Empresas a serem vinculadas:", empresas);
+          console.log(`Empresas a serem vinculadas: ${empresas ? empresas.length : 0}`);
           
           // Remover empresas existentes
           const { error: deleteEmpresasError } = await supabase
@@ -239,21 +257,32 @@ serve(async (req) => {
 
           if (deleteEmpresasError) {
             console.error("Erro ao remover empresas vinculadas:", deleteEmpresasError);
+          } else {
+            console.log("Empresas anteriores removidas com sucesso");
           }
 
           // Adicionar novas empresas
           if (Array.isArray(empresas) && empresas.length > 0) {
-            for (const empresaId of empresas) {
-              console.log(`Vinculando empresa ${empresaId} ao usuário ${userId}`);
-              const { error: empresaError } = await supabase
+            console.log(`Inserindo ${empresas.length} novas empresas`);
+            
+            // Processar em lotes para evitar problemas de tamanho da requisição
+            const batchSize = 50;
+            
+            for (let i = 0; i < empresas.length; i += batchSize) {
+              const batch = empresas.slice(i, i + batchSize);
+              console.log(`Processando lote de empresas ${i+1} até ${Math.min(i+batchSize, empresas.length)} de ${empresas.length}`);
+              
+              const empresasData = batch.map(empresaId => ({
+                usuario_id: userId,
+                empresa_id: empresaId
+              }));
+              
+              const { error: empresaBatchError } = await supabase
                 .from("usuario_empresas")
-                .insert({
-                  usuario_id: userId,
-                  empresa_id: empresaId
-                });
-
-              if (empresaError) {
-                console.error(`Erro ao vincular empresa ${empresaId}:`, empresaError);
+                .insert(empresasData);
+              
+              if (empresaBatchError) {
+                console.error(`Erro ao vincular lote de empresas:`, empresaBatchError);
               }
             }
           } else {
@@ -262,9 +291,9 @@ serve(async (req) => {
         }
 
         // Atualizar telas vinculadas
-        if (telas) {
+        if (telas !== undefined) {
           console.log("Updating screen links...");
-          console.log("Telas a serem vinculadas:", telas.length);
+          console.log(`Telas a serem vinculadas: ${telas ? telas.length : 0}`);
           
           // Remover telas existentes
           const { error: deleteTelaError } = await supabase
@@ -274,26 +303,39 @@ serve(async (req) => {
 
           if (deleteTelaError) {
             console.error("Erro ao remover telas vinculadas:", deleteTelaError);
+          } else {
+            console.log("Telas anteriores removidas com sucesso");
           }
 
           // Adicionar novas telas
           if (Array.isArray(telas) && telas.length > 0) {
-            for (const tela of telas) {
-              if (tela.permissao_leitura) {
-                console.log(`Vinculando tela ${tela.id} ao usuário ${userId}`);
-                const { error: telaError } = await supabase
-                  .from("acesso_telas")
-                  .insert({
-                    usuario_id: userId,
-                    tela_id: tela.id,
-                    permissao_leitura: tela.permissao_leitura,
-                    permissao_escrita: tela.permissao_escrita,
-                    permissao_exclusao: tela.permissao_exclusao
-                  });
-
-                if (telaError) {
-                  console.error(`Erro ao vincular tela ${tela.id}:`, telaError);
-                }
+            console.log(`Inserindo ${telas.length} novas telas`);
+            
+            // Filtrar apenas telas com permissão de leitura
+            const telasComPermissao = telas.filter(tela => tela.permissao_leitura);
+            console.log(`${telasComPermissao.length} telas com permissão de leitura serão inseridas`);
+            
+            // Processar em lotes
+            const batchSize = 50;
+            
+            for (let i = 0; i < telasComPermissao.length; i += batchSize) {
+              const batch = telasComPermissao.slice(i, i + batchSize);
+              console.log(`Processando lote de telas ${i+1} até ${Math.min(i+batchSize, telasComPermissao.length)} de ${telasComPermissao.length}`);
+              
+              const telasData = batch.map(tela => ({
+                usuario_id: userId,
+                tela_id: tela.id,
+                permissao_leitura: tela.permissao_leitura,
+                permissao_escrita: tela.permissao_escrita,
+                permissao_exclusao: tela.permissao_exclusao
+              }));
+              
+              const { error: telaBatchError } = await supabase
+                .from("acesso_telas")
+                .insert(telasData);
+              
+              if (telaBatchError) {
+                console.error(`Erro ao vincular lote de telas:`, telaBatchError);
               }
             }
           } else {

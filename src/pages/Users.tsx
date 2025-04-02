@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -103,14 +102,14 @@ const Users = () => {
     try {
       console.log("Carregando todas as empresas...");
       
-      // Usando paginação para lidar com grandes volumes de dados
-      let pagina = 0;
-      const limite = 100;
+      // Método para carregar todas as empresas usando paginação
       let todasEmpresas: Empresa[] = [];
       let maisRegistros = true;
+      let pagina = 0;
+      const limite = 100; // Limite de 100 registros por vez para não sobrecarregar
       
       while (maisRegistros) {
-        console.log(`Carregando empresas página ${pagina}, limite ${limite}`);
+        console.log(`Carregando lote de empresas: página ${pagina + 1}, limite ${limite}`);
         
         const { data, error, count } = await supabase
           .from("empresas")
@@ -119,29 +118,37 @@ const Users = () => {
           .order('nome', { ascending: true });
         
         if (error) {
-          console.error("Erro ao carregar empresas:", error);
-          toast.error("Erro ao carregar empresas");
+          console.error(`Erro ao carregar empresas (página ${pagina + 1}):`, error);
+          toast.error(`Erro ao carregar empresas: ${error.message}`);
           break;
         }
         
         if (data && data.length > 0) {
+          console.log(`Carregadas ${data.length} empresas na página ${pagina + 1}`);
           todasEmpresas = [...todasEmpresas, ...data];
           pagina++;
           
-          // Verificar se já carregamos todos os registros
+          // Verificar se carregamos todos os registros
           if (data.length < limite) {
+            console.log("Não há mais empresas para carregar");
             maisRegistros = false;
           }
         } else {
+          console.log("Nenhuma empresa encontrada ou fim da paginação");
           maisRegistros = false;
         }
       }
       
       console.log(`Total de empresas carregadas: ${todasEmpresas.length}`);
+      
+      if (todasEmpresas.length === 0) {
+        toast.warning("Nenhuma empresa encontrada no banco de dados");
+      }
+      
       setEmpresas(todasEmpresas);
     } catch (error) {
       console.error("Erro ao carregar empresas:", error);
-      toast.error("Erro ao carregar empresas");
+      toast.error(`Erro ao carregar empresas: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
     } finally {
       setLoadingEmpresas(false);
     }
@@ -160,7 +167,7 @@ const Users = () => {
       
       if (error) {
         console.error("Erro ao carregar telas:", error);
-        toast.error("Erro ao carregar telas");
+        toast.error(`Erro ao carregar telas: ${error.message}`);
         return;
       }
       
@@ -170,7 +177,7 @@ const Users = () => {
       }
     } catch (error) {
       console.error("Erro ao carregar telas:", error);
-      toast.error("Erro ao carregar telas");
+      toast.error(`Erro ao carregar telas: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
     }
   };
 

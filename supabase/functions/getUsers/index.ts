@@ -71,21 +71,26 @@ serve(async (req) => {
 
     // Parse request body for any filters
     let filters = {};
+    let page = 1;
+    let perPage = 50;
+    
     try {
       if (req.method === "POST") {
         const requestData = await req.json();
         filters = requestData.filters || {};
+        page = requestData.page || 1;
+        perPage = requestData.perPage || 50;
       }
     } catch (error) {
       console.log("No request body or invalid JSON, using default filters");
     }
 
-    console.log("Listing users...");
+    console.log(`Listing users... Page: ${page}, Per page: ${perPage}`);
     
     // Listar usuários
     const { data: users, error: usersError } = await supabase.auth.admin.listUsers({
-      page: 1,
-      perPage: 1000, // Aumente conforme necessário
+      page: page,
+      perPage: perPage,
     });
 
     if (usersError) {
@@ -93,13 +98,64 @@ serve(async (req) => {
       throw new Error(`Erro ao listar usuários: ${usersError.message}`);
     }
 
-    console.log("Successfully listed users, count:", users.users.length);
+    const totalUsers = users.users.length;
+    console.log("Successfully listed users, count:", totalUsers);
 
-    // Return users
+    // Verificar se todos os usuários têm vinculações
+    let userDetailsWithRelations = [];
+    
+    for (const user of users.users) {
+      console.log(`Processing user data for: ${user.email}`);
+      
+      // Buscar empresas vinculadas
+      const { data: empresasVinculadas, error: empresasError } = await supabase
+        .from("usuario_empresas")
+        .select("empresa_id, empresa:empresa_id(id, nome, cnpj)")
+        .eq("usuario_id", user.id);
+      
+      if (empresasError) {
+        console.error(`Error fetching companies for user ${user.id}:`, empresasError);
+      }
+
+      // Buscar telas vinculadas
+      const { data: telasVinculadas, error: telasError } = await supabase
+        .from("acesso_telas")
+        .select(`
+          tela_id,
+          permissao_leitura,
+          permissao_escrita,
+          permissao_exclusao,
+          tela:tela_id(id, nome, codigo)
+        `)
+        .eq("usuario_id", user.id);
+      
+      if (telasError) {
+        console.error(`Error fetching screens for user ${user.id}:`, telasError);
+      }
+
+      // Adicionar dados à resposta
+      userDetailsWithRelations.push({
+        id: user.id,
+        email: user.email,
+        created_at: user.created_at,
+        is_confirmed: user.confirmed_at !== null,
+        user_metadata: user.user_metadata,
+        last_sign_in_at: user.last_sign_in_at,
+        empresas: empresasVinculadas || [],
+        telas: telasVinculadas || []
+      });
+    }
+
+    console.log(`Successfully processed ${userDetailsWithRelations.length} users with their relations`);
+
+    // Return users with their relations
     return new Response(
       JSON.stringify({
         success: true,
-        users: users.users
+        users: userDetailsWithRelations,
+        page: page,
+        perPage: perPage,
+        total: users.total || totalUsers
       }),
       {
         headers: { 

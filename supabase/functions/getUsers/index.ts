@@ -107,43 +107,102 @@ serve(async (req) => {
     for (const user of users.users) {
       console.log(`Processing user data for: ${user.email}`);
       
-      // Buscar empresas vinculadas
-      const { data: empresasVinculadas, error: empresasError } = await supabase
-        .from("usuario_empresas")
-        .select("empresa_id, empresa:empresa_id(id, nome, cnpj)")
-        .eq("usuario_id", user.id);
-      
-      if (empresasError) {
-        console.error(`Error fetching companies for user ${user.id}:`, empresasError);
-      }
+      try {
+        // Buscar informações do perfil
+        const { data: perfilData, error: perfilError } = await supabase
+          .from("perfis")
+          .select("*")
+          .eq("id", user.id)
+          .maybeSingle();
+          
+        if (perfilError) {
+          console.error(`Error fetching profile for user ${user.id}:`, perfilError);
+        }
+        
+        // Buscar empresas vinculadas
+        const { data: empresasVinculadas, error: empresasError } = await supabase
+          .from("usuario_empresas")
+          .select("empresa_id, empresa:empresas!inner(id, nome, cnpj)")
+          .eq("usuario_id", user.id);
+        
+        if (empresasError) {
+          console.error(`Error fetching companies for user ${user.id}:`, empresasError);
+        }
+        
+        const empresasFormatadas = [];
+        if (empresasVinculadas && empresasVinculadas.length > 0) {
+          for (const item of empresasVinculadas) {
+            if (item.empresa) {
+              empresasFormatadas.push({
+                id: item.empresa.id,
+                nome: item.empresa.nome,
+                cnpj: item.empresa.cnpj
+              });
+            }
+          }
+        }
 
-      // Buscar telas vinculadas
-      const { data: telasVinculadas, error: telasError } = await supabase
-        .from("acesso_telas")
-        .select(`
-          tela_id,
-          permissao_leitura,
-          permissao_escrita,
-          permissao_exclusao,
-          tela:tela_id(id, nome, codigo)
-        `)
-        .eq("usuario_id", user.id);
-      
-      if (telasError) {
-        console.error(`Error fetching screens for user ${user.id}:`, telasError);
-      }
+        // Buscar telas vinculadas
+        const { data: telasVinculadas, error: telasError } = await supabase
+          .from("acesso_telas")
+          .select(`
+            tela_id,
+            permissao_leitura,
+            permissao_escrita,
+            permissao_exclusao,
+            tela:telas!inner(id, nome, codigo)
+          `)
+          .eq("usuario_id", user.id);
+        
+        if (telasError) {
+          console.error(`Error fetching screens for user ${user.id}:`, telasError);
+        }
+        
+        const telasFormatadas = [];
+        if (telasVinculadas && telasVinculadas.length > 0) {
+          for (const item of telasVinculadas) {
+            if (item.tela) {
+              telasFormatadas.push({
+                id: item.tela.id,
+                nome: item.tela.nome,
+                codigo: item.tela.codigo,
+                permissao_leitura: item.permissao_leitura,
+                permissao_escrita: item.permissao_escrita,
+                permissao_exclusao: item.permissao_exclusao
+              });
+            }
+          }
+        }
 
-      // Adicionar dados à resposta
-      userDetailsWithRelations.push({
-        id: user.id,
-        email: user.email,
-        created_at: user.created_at,
-        is_confirmed: user.confirmed_at !== null,
-        user_metadata: user.user_metadata,
-        last_sign_in_at: user.last_sign_in_at,
-        empresas: empresasVinculadas || [],
-        telas: telasVinculadas || []
-      });
+        // Adicionar dados à resposta
+        userDetailsWithRelations.push({
+          id: user.id,
+          email: user.email,
+          created_at: user.created_at,
+          is_confirmed: user.confirmed_at !== null,
+          user_metadata: user.user_metadata || {},
+          last_sign_in_at: user.last_sign_in_at,
+          empresas: empresasFormatadas,
+          telas: telasFormatadas,
+          tipo_usuario: perfilData?.tipo_usuario || user.user_metadata?.tipo_usuario || "normal",
+          nome: perfilData?.nome || user.user_metadata?.nome || user.email
+        });
+      } catch (error) {
+        console.error(`Error processing user ${user.id}:`, error);
+        // Incluir o usuário mesmo sem as relações para não perder dados
+        userDetailsWithRelations.push({
+          id: user.id,
+          email: user.email,
+          created_at: user.created_at,
+          is_confirmed: user.confirmed_at !== null,
+          user_metadata: user.user_metadata || {},
+          last_sign_in_at: user.last_sign_in_at,
+          empresas: [],
+          telas: [],
+          tipo_usuario: user.user_metadata?.tipo_usuario || "normal",
+          nome: user.user_metadata?.nome || user.email
+        });
+      }
     }
 
     console.log(`Successfully processed ${userDetailsWithRelations.length} users with their relations`);

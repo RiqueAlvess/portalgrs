@@ -1,15 +1,8 @@
-import { useState, useEffect } from "react";
+
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -19,13 +12,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from "@/components/ui/select";
-import { 
   Card, 
   CardContent, 
   CardDescription, 
@@ -33,15 +19,13 @@ import {
   CardHeader, 
   CardTitle 
 } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Search, X, AlertCircle, Loader2 } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { CryptoDemo } from "@/components/CryptoDemo";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UserForm } from "@/components/UserForm";
 import { UserList } from "@/components/UserList";
+import { CryptoDemo } from "@/components/CryptoDemo";
 
 interface Usuario {
   id: string;
@@ -78,6 +62,12 @@ const Users = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadingEmpresas, setLoadingEmpresas] = useState(false);
+  const [empresasPagination, setEmpresasPagination] = useState({
+    page: 0,
+    limit: 100,
+    loading: false,
+    hasMore: true
+  });
   
   const [formData, setFormData] = useState({
     nome: "",
@@ -96,58 +86,77 @@ const Users = () => {
 
   const isAdmin = currentUser?.user_metadata?.tipo_usuario === 'admin' || usuarioAtual?.tipo_usuario === 'admin';
 
+  // Função para carregar próximo lote de empresas
+  const carregarMaisEmpresas = useCallback(async () => {
+    if (!empresasPagination.hasMore || empresasPagination.loading) return;
+    
+    setEmpresasPagination(prev => ({ ...prev, loading: true }));
+    try {
+      console.log(`Carregando lote de empresas: página ${empresasPagination.page + 1}, limite ${empresasPagination.limit}`);
+      
+      const { data, error, count } = await supabase
+        .from("empresas")
+        .select("id, nome, cnpj", { count: 'exact' })
+        .range(
+          empresasPagination.page * empresasPagination.limit, 
+          (empresasPagination.page + 1) * empresasPagination.limit - 1
+        )
+        .order('nome', { ascending: true });
+      
+      if (error) {
+        console.error(`Erro ao carregar empresas (página ${empresasPagination.page + 1}):`, error);
+        toast.error(`Erro ao carregar empresas: ${error.message}`);
+        throw error;
+      }
+      
+      if (data && data.length > 0) {
+        console.log(`Carregadas ${data.length} empresas na página ${empresasPagination.page + 1}`);
+        // Adicionar apenas empresas que não existem no array atual (para evitar duplicações)
+        setEmpresas(prev => {
+          const idsAtuais = new Set(prev.map(empresa => empresa.id));
+          const novasEmpresas = data.filter(empresa => !idsAtuais.has(empresa.id));
+          return [...prev, ...novasEmpresas];
+        });
+        
+        // Verificar se há mais páginas para carregar
+        const hasMore = data.length === empresasPagination.limit;
+        setEmpresasPagination(prev => ({
+          ...prev, 
+          page: prev.page + 1,
+          hasMore
+        }));
+        
+        console.log(`Ainda há mais empresas para carregar: ${hasMore}`);
+      } else {
+        console.log("Nenhuma empresa encontrada ou fim da paginação");
+        setEmpresasPagination(prev => ({ ...prev, hasMore: false }));
+      }
+      
+      return data;
+    } catch (error) {
+      console.error("Erro ao carregar empresas:", error);
+      return null;
+    } finally {
+      setEmpresasPagination(prev => ({ ...prev, loading: false }));
+    }
+  }, [empresasPagination.page, empresasPagination.limit, empresasPagination.hasMore, empresasPagination.loading]);
+
   // Função para carregar todas as empresas
   const carregarEmpresas = async () => {
     setLoadingEmpresas(true);
+    setEmpresasPagination({
+      page: 0,
+      limit: 100,
+      loading: false,
+      hasMore: true
+    });
+    setEmpresas([]);
+    
     try {
-      console.log("Carregando todas as empresas...");
-      
-      // Método para carregar todas as empresas usando paginação
-      let todasEmpresas: Empresa[] = [];
-      let maisRegistros = true;
-      let pagina = 0;
-      const limite = 100; // Limite de 100 registros por vez para não sobrecarregar
-      
-      while (maisRegistros) {
-        console.log(`Carregando lote de empresas: página ${pagina + 1}, limite ${limite}`);
-        
-        const { data, error, count } = await supabase
-          .from("empresas")
-          .select("id, nome, cnpj", { count: 'exact' })
-          .range(pagina * limite, (pagina + 1) * limite - 1)
-          .order('nome', { ascending: true });
-        
-        if (error) {
-          console.error(`Erro ao carregar empresas (página ${pagina + 1}):`, error);
-          toast.error(`Erro ao carregar empresas: ${error.message}`);
-          break;
-        }
-        
-        if (data && data.length > 0) {
-          console.log(`Carregadas ${data.length} empresas na página ${pagina + 1}`);
-          todasEmpresas = [...todasEmpresas, ...data];
-          pagina++;
-          
-          // Verificar se carregamos todos os registros
-          if (data.length < limite) {
-            console.log("Não há mais empresas para carregar");
-            maisRegistros = false;
-          }
-        } else {
-          console.log("Nenhuma empresa encontrada ou fim da paginação");
-          maisRegistros = false;
-        }
-      }
-      
-      console.log(`Total de empresas carregadas: ${todasEmpresas.length}`);
-      
-      if (todasEmpresas.length === 0) {
-        toast.warning("Nenhuma empresa encontrada no banco de dados");
-      }
-      
-      setEmpresas(todasEmpresas);
+      console.log("Iniciando carregamento de empresas...");
+      await carregarMaisEmpresas();
     } catch (error) {
-      console.error("Erro ao carregar empresas:", error);
+      console.error("Erro ao iniciar carregamento de empresas:", error);
       toast.error(`Erro ao carregar empresas: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
     } finally {
       setLoadingEmpresas(false);
@@ -181,110 +190,84 @@ const Users = () => {
     }
   };
 
+  // Função para carregar usuários
+  const carregarUsuarios = async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    
+    try {
+      console.log("Buscando usuários via Edge Function...");
+      const { data, error } = await supabase.functions.invoke('getUsers', {
+        body: {}
+      });
+      
+      if (error) {
+        console.error("Erro ao invocar Edge Function getUsers:", error);
+        throw new Error(`Erro ao carregar usuários: ${error.message}`);
+      }
+      
+      if (!data || !data.success || !Array.isArray(data.users)) {
+        console.error("Resposta inválida da função getUsers:", data);
+        throw new Error("Erro ao carregar usuários: formato de resposta inválido");
+      }
+
+      console.log("Usuários carregados via edge function:", data.users.length);
+      setUsuarios(data.users);
+    } catch (error: any) {
+      setLoadError(error.message || "Falha ao carregar usuários");
+      console.error("Erro ao carregar usuários:", error);
+      toast.error("Erro ao carregar usuários");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     const loadData = async () => {
-      setIsLoading(true);
-      setLoadError(null);
-      try {
-        console.log("Carregando dados da página de usuários...");
-        
-        // Carregar empresas e telas em paralelo
-        await Promise.all([
-          carregarEmpresas(),
-          carregarTelas()
-        ]);
-
+      if (isAdmin) {
         try {
-          console.log("Buscando usuários via Edge Function...");
-          const { data, error } = await supabase.functions.invoke('getUsers', {
-            body: {}
-          });
+          console.log("Carregando dados da página de usuários...");
           
-          if (error) {
-            console.error("Erro ao invocar Edge Function getUsers:", error);
-            throw new Error(`Erro ao carregar usuários: ${error.message}`);
-          }
-          
-          if (!data || !data.success || !Array.isArray(data.users)) {
-            console.error("Resposta inválida da função getUsers:", data);
-            throw new Error("Erro ao carregar usuários: formato de resposta inválido");
-          }
-
-          console.log("Usuários carregados via edge function:", data.users.length);
-          
-          const usuariosProcessados = await Promise.all(
-            data.users.map(async (user: any) => {
-              const { data: vinculacoesEmpresas, error: vinculacoesEmpresasError } = await supabase
-                .from("usuario_empresas")
-                .select(`
-                  empresa_id,
-                  empresa:empresa_id(id, nome)
-                `)
-                .eq("usuario_id", user.id);
-
-              if (vinculacoesEmpresasError) {
-                console.error("Erro ao carregar empresas do usuário:", vinculacoesEmpresasError);
-              }
-
-              const { data: vinculacoesTelas, error: vinculacoesTelaError } = await supabase
-                .from("acesso_telas")
-                .select(`
-                  tela_id,
-                  permissao_leitura,
-                  permissao_escrita,
-                  permissao_exclusao,
-                  tela:tela_id(id, nome)
-                `)
-                .eq("usuario_id", user.id);
-
-              if (vinculacoesTelaError) {
-                console.error("Erro ao carregar telas do usuário:", vinculacoesTelaError);
-              }
-
-              const empresasUsuario = vinculacoesEmpresas?.map(v => ({
-                id: v.empresa.id,
-                nome: v.empresa.nome
-              })) || [];
-
-              const telasUsuario = vinculacoesTelas?.map(v => ({
-                id: v.tela.id,
-                nome: v.tela.nome,
-                permissao_leitura: v.permissao_leitura,
-                permissao_escrita: v.permissao_escrita,
-                permissao_exclusao: v.permissao_exclusao
-              })) || [];
-
-              return {
-                id: user.id,
-                email: user.email || "",
-                nome: user.user_metadata?.nome || user.user_metadata?.full_name || user.email || "Usuário sem nome",
-                tipo_usuario: user.user_metadata?.tipo_usuario || "normal",
-                empresas: empresasUsuario,
-                telas: telasUsuario,
-                ativo: user.is_confirmed
-              };
-            })
-          );
-
-          setUsuarios(usuariosProcessados);
+          // Carregar empresas e telas em paralelo
+          await Promise.all([
+            carregarEmpresas(),
+            carregarTelas(),
+            carregarUsuarios()
+          ]);
         } catch (error: any) {
-          setLoadError(error.message || "Falha ao carregar usuários");
-          console.error("Erro ao carregar usuários:", error);
-          toast.error("Erro ao carregar usuários");
+          setLoadError(error.message || "Falha ao carregar dados");
+          console.error("Erro ao carregar dados:", error);
+          toast.error("Erro ao carregar dados");
         }
-      } catch (error: any) {
-        setLoadError(error.message || "Falha ao carregar dados");
-        console.error("Erro ao carregar dados:", error);
-        toast.error("Erro ao carregar dados");
-      } finally {
-        setIsLoading(false);
       }
     };
 
-    if (isAdmin) {
-      loadData();
-    }
+    loadData();
   }, [isAdmin, currentUser]);
+
+  // Monitorar o scroll da lista de empresas para carregar mais quando necessário
+  useEffect(() => {
+    const handleScroll = (entries: IntersectionObserverEntry[]) => {
+      const [entry] = entries;
+      if (entry.isIntersecting && empresasPagination.hasMore && !empresasPagination.loading) {
+        carregarMaisEmpresas();
+      }
+    };
+
+    // Criar um observer para detectar quando o usuário rola até o final da lista
+    const observer = new IntersectionObserver(handleScroll, { threshold: 0.5 });
+    const loadMoreTrigger = document.getElementById('load-more-empresas');
+    
+    if (loadMoreTrigger) {
+      observer.observe(loadMoreTrigger);
+    }
+
+    return () => {
+      if (loadMoreTrigger) {
+        observer.unobserve(loadMoreTrigger);
+      }
+    };
+  }, [carregarMaisEmpresas, empresasPagination.hasMore, empresasPagination.loading]);
 
   const filteredUsers = usuarios.filter(usuario =>
     usuario.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -354,8 +337,8 @@ const Users = () => {
     try {
       if (isAddingUser) {
         console.log("Criando novo usuário...");
-        console.log("Empresas vinculadas:", formData.empresasVinculadas);
-        console.log("Telas vinculadas:", formData.telasVinculadas);
+        console.log("Empresas vinculadas:", formData.empresasVinculadas.length);
+        console.log("Telas vinculadas:", formData.telasVinculadas.length);
         
         const { data, error } = await supabase.functions.invoke('manageUser', {
           body: {
@@ -386,8 +369,8 @@ const Users = () => {
         toast.success("Usuário adicionado com sucesso!");
       } else if (editingUser) {
         console.log("Atualizando usuário existente...");
-        console.log("Empresas vinculadas:", formData.empresasVinculadas);
-        console.log("Telas vinculadas:", formData.telasVinculadas);
+        console.log("Empresas vinculadas:", formData.empresasVinculadas.length);
+        console.log("Telas vinculadas:", formData.telasVinculadas.length);
         
         const { data, error } = await supabase.functions.invoke('manageUser', {
           body: {
@@ -419,13 +402,14 @@ const Users = () => {
         toast.success("Usuário atualizado com sucesso!");
       }
 
-      window.location.reload();
+      // Recarregar dados
+      await carregarUsuarios();
+      setIsDialogOpen(false);
     } catch (error) {
       console.error("Erro ao salvar usuário:", error);
       toast.error("Ocorreu um erro ao salvar o usuário: " + (error as Error).message);
     } finally {
       setIsLoading(false);
-      setIsDialogOpen(false);
     }
   };
 
@@ -468,48 +452,8 @@ const Users = () => {
     }
   };
 
-  const toggleEmpresa = (empresaId: string) => {
-    setFormData(prev => {
-      if (prev.empresasVinculadas.includes(empresaId)) {
-        return {
-          ...prev,
-          empresasVinculadas: prev.empresasVinculadas.filter(id => id !== empresaId)
-        };
-      } else {
-        return {
-          ...prev,
-          empresasVinculadas: [...prev.empresasVinculadas, empresaId]
-        };
-      }
-    });
-  };
-
-  const updateTelaPermission = (telaId: string, permissionType: 'permissao_leitura' | 'permissao_escrita' | 'permissao_exclusao', value: boolean) => {
-    setFormData(prev => {
-      const newTelasVinculadas = [...prev.telasVinculadas];
-      const telaIndex = newTelasVinculadas.findIndex(t => t.id === telaId);
-      
-      if (telaIndex >= 0) {
-        newTelasVinculadas[telaIndex] = {
-          ...newTelasVinculadas[telaIndex],
-          [permissionType]: value
-        };
-        
-        if (permissionType === 'permissao_leitura' && !value) {
-          newTelasVinculadas[telaIndex].permissao_escrita = false;
-          newTelasVinculadas[telaIndex].permissao_exclusao = false;
-        }
-        
-        if ((permissionType === 'permissao_escrita' || permissionType === 'permissao_exclusao') && value) {
-          newTelasVinculadas[telaIndex].permissao_leitura = true;
-        }
-      }
-      
-      return {
-        ...prev,
-        telasVinculadas: newTelasVinculadas
-      };
-    });
+  const handleReload = async () => {
+    await carregarUsuarios();
   };
 
   if (!isAdmin) {
@@ -555,119 +499,25 @@ const Users = () => {
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <CardTitle>Usuários do Sistema</CardTitle>
                 <div className="relative w-full sm:w-64">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
                     type="search"
                     placeholder="Buscar usuários..."
-                    className="pl-8"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
-                  {searchTerm && (
-                    <button
-                      onClick={() => setSearchTerm("")}
-                      className="absolute right-2.5 top-2.5"
-                    >
-                      <X className="h-4 w-4 text-muted-foreground" />
-                    </button>
-                  )}
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              {isLoading ? (
-                <div className="flex justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-sidebar-accent"></div>
-                </div>
-              ) : loadError ? (
-                <div className="text-center py-6 border rounded-md p-4 bg-destructive/10 text-destructive">
-                  <AlertCircle className="h-8 w-8 mx-auto mb-2" />
-                  <h3 className="font-semibold mb-2">Erro ao carregar usuários</h3>
-                  <p>{loadError}</p>
-                  <p className="text-sm mt-4">
-                    Verifique se as Edge Functions estão corretamente implantadas no Supabase
-                    e se as variáveis de ambiente SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY estão configuradas.
-                  </p>
-                  <Button 
-                    onClick={() => window.location.reload()}
-                    variant="outline"
-                    className="mt-4"
-                  >
-                    Tentar novamente
-                  </Button>
-                </div>
-              ) : usuarios.length === 0 ? (
-                <div className="text-center py-6 text-muted-foreground">
-                  <p>Nenhum usuário encontrado. Use funções Edge para administração de usuários.</p>
-                  <p className="text-sm mt-2">Esta funcionalidade requer configuração de Edge Functions no Supabase.</p>
-                </div>
-              ) : (
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Empresas</TableHead>
-                        <TableHead className="text-right">Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredUsers.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
-                            Nenhum usuário encontrado com o termo de busca
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        filteredUsers.map((usuario) => (
-                          <TableRow key={usuario.id}>
-                            <TableCell className="font-medium">{usuario.nome}</TableCell>
-                            <TableCell>{usuario.email}</TableCell>
-                            <TableCell>
-                              {usuario.tipo_usuario === "admin" ? "Administrador" : "Usuário Normal"}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                {usuario.empresas.length > 0 ? (
-                                  usuario.empresas.map((emp) => (
-                                    <span key={emp.id} className="text-sm">
-                                      {emp.nome}
-                                    </span>
-                                  ))
-                                ) : (
-                                  <span className="text-sm text-muted-foreground">Sem empresas vinculadas</span>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex justify-end gap-2">
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon"
-                                  onClick={() => handleEditUser(usuario)}
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                  <span className="sr-only">Editar</span>
-                                </Button>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon"
-                                  onClick={() => handleDeleteUser(usuario.id)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                  <span className="sr-only">Excluir</span>
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+              <UserList 
+                usuarios={usuarios} 
+                filteredUsers={filteredUsers}
+                isLoading={isLoading}
+                loadError={loadError}
+                handleEditUser={handleEditUser}
+                handleDeleteUser={handleDeleteUser}
+                handleReload={handleReload}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -687,168 +537,25 @@ const Users = () => {
               Preencha os campos para {isAddingUser ? "adicionar um novo usuário" : "atualizar os dados do usuário"}.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="nome" className="text-right">
-                Nome
-              </Label>
-              <Input
-                id="nome"
-                value={formData.nome}
-                onChange={(e) => setFormData({...formData, nome: e.target.value})}
-                className="col-span-3"
-              />
+          
+          <UserForm
+            formData={formData}
+            setFormData={setFormData}
+            empresas={empresas}
+            telas={telas}
+            isAddingUser={isAddingUser}
+            loadingEmpresas={loadingEmpresas}
+          />
+          
+          {/* Elemento invisível para detectar quando o usuário rolou até o fim da lista de empresas */}
+          <div id="load-more-empresas" className="h-1" />
+          
+          {empresasPagination.loading && (
+            <div className="flex justify-center p-2">
+              <Loader2 className="animate-spin h-5 w-5 text-muted-foreground" />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="email" className="text-right">
-                Email
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({...formData, email: e.target.value})}
-                className="col-span-3"
-                disabled={!isAddingUser}
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="senha" className="text-right">
-                Senha
-              </Label>
-              <Input
-                id="senha"
-                type="password"
-                placeholder={isAddingUser ? "" : "Deixe em branco para manter a mesma"}
-                value={formData.senha}
-                onChange={(e) => setFormData({...formData, senha: e.target.value})}
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="tipoUsuario" className="text-right">
-                Tipo de Usuário
-              </Label>
-              <Select
-                value={formData.tipoUsuario}
-                onValueChange={(value) => setFormData({...formData, tipoUsuario: value as "admin" | "normal"})}
-              >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Selecione um tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Administrador</SelectItem>
-                  <SelectItem value="normal">Usuário Normal</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="grid grid-cols-4 gap-4">
-              <Label className="text-right pt-2">Empresas Vinculadas</Label>
-              <div className="col-span-3 space-y-2">
-                {loadingEmpresas ? (
-                  <div className="flex items-center text-muted-foreground">
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Carregando empresas...
-                  </div>
-                ) : empresas.length > 0 ? (
-                  <div className="max-h-60 overflow-y-auto border rounded-md p-2">
-                    <div className="sticky top-0 bg-white border-b pb-2 mb-2">
-                      <Input 
-                        placeholder="Buscar empresas..." 
-                        className="w-full"
-                        onChange={(e) => {
-                          // Implementar busca local de empresas
-                          const searchValue = e.target.value.toLowerCase();
-                          // Este é apenas um exemplo - você precisaria implementar a lógica de busca aqui
-                        }}
-                      />
-                    </div>
-                    {empresas.map((empresa) => (
-                      <div key={empresa.id} className="flex items-center space-x-2 py-1">
-                        <Checkbox
-                          id={`empresa-${empresa.id}`}
-                          checked={formData.empresasVinculadas.includes(empresa.id)}
-                          onCheckedChange={() => toggleEmpresa(empresa.id)}
-                        />
-                        <Label htmlFor={`empresa-${empresa.id}`} className="cursor-pointer text-sm">
-                          {empresa.nome} <span className="text-xs text-muted-foreground">({empresa.cnpj})</span>
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-muted-foreground">
-                    Nenhuma empresa disponível. Verifique a configuração do banco de dados.
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-4 gap-4">
-              <Label className="text-right pt-2">Permissões de Telas</Label>
-              <div className="col-span-3">
-                {telas.length > 0 ? (
-                  <div className="rounded-md border overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Tela</TableHead>
-                          <TableHead className="text-center">Leitura</TableHead>
-                          <TableHead className="text-center">Escrita</TableHead>
-                          <TableHead className="text-center">Exclusão</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {telas.map((tela) => {
-                          const telaVinculada = formData.telasVinculadas.find(t => t.id === tela.id);
-                          const leitura = telaVinculada?.permissao_leitura ?? false;
-                          const escrita = telaVinculada?.permissao_escrita ?? false;
-                          const exclusao = telaVinculada?.permissao_exclusao ?? false;
-                          
-                          return (
-                            <TableRow key={tela.id}>
-                              <TableCell>{tela.nome}</TableCell>
-                              <TableCell className="text-center">
-                                <Checkbox
-                                  checked={leitura}
-                                  onCheckedChange={(checked) => 
-                                    updateTelaPermission(tela.id, 'permissao_leitura', !!checked)
-                                  }
-                                />
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <Checkbox
-                                  checked={escrita}
-                                  disabled={!leitura}
-                                  onCheckedChange={(checked) => 
-                                    updateTelaPermission(tela.id, 'permissao_escrita', !!checked)
-                                  }
-                                />
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <Checkbox
-                                  checked={exclusao}
-                                  disabled={!leitura}
-                                  onCheckedChange={(checked) => 
-                                    updateTelaPermission(tela.id, 'permissao_exclusao', !!checked)
-                                  }
-                                />
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <div className="text-muted-foreground">
-                    Nenhuma tela disponível. Verifique a configuração do banco de dados.
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          )}
+          
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancelar

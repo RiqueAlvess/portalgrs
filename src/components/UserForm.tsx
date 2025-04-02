@@ -72,6 +72,7 @@ export const UserForm: React.FC<UserFormProps> = ({
   const [filteredEmpresas, setFilteredEmpresas] = useState<Empresa[]>(empresas);
   const [telasSearch, setTelasSearch] = useState("");
   const [filteredTelas, setFilteredTelas] = useState<Tela[]>(telas);
+  const [selectAllEnabled, setSelectAllEnabled] = useState(true);
 
   // Atualizar empresas filtradas quando a busca mudar ou quando as empresas carregarem
   useEffect(() => {
@@ -152,6 +153,13 @@ export const UserForm: React.FC<UserFormProps> = ({
   };
 
   const selectAllEmpresas = () => {
+    // Proteger contra seleções muito grandes que podem causar problemas de desempenho
+    if (filteredEmpresas.length > 500 && selectAllEnabled) {
+      setSelectAllEnabled(false);
+      toast.warning("Muitas empresas para selecionar de uma vez (mais de 500). Refine sua busca.");
+      return;
+    }
+    
     setFormData({
       ...formData,
       empresasVinculadas: filteredEmpresas.map(empresa => empresa.id)
@@ -278,8 +286,8 @@ export const UserForm: React.FC<UserFormProps> = ({
                     </button>
                   )}
                 </div>
-                <div className="flex justify-between mt-2">
-                  <span className="text-sm text-muted-foreground">
+                <div className="flex justify-between mt-2 flex-wrap gap-2">
+                  <span className="text-sm text-muted-foreground pt-1">
                     {filteredEmpresas.length} empresas encontradas
                   </span>
                   <div className="space-x-2">
@@ -287,7 +295,8 @@ export const UserForm: React.FC<UserFormProps> = ({
                       variant="outline"
                       size="sm"
                       onClick={selectAllEmpresas}
-                      disabled={filteredEmpresas.length === 0}
+                      disabled={filteredEmpresas.length === 0 || !selectAllEnabled}
+                      title={!selectAllEnabled ? "Muitas empresas para selecionar de uma vez. Refine sua busca." : ""}
                     >
                       Selecionar todas
                     </Button>
@@ -322,6 +331,9 @@ export const UserForm: React.FC<UserFormProps> = ({
                   ))
                 )}
               </div>
+              <div className="pt-2 text-center text-sm text-muted-foreground">
+                {formData.empresasVinculadas.length} empresas selecionadas
+              </div>
             </div>
           ) : (
             <div className="text-muted-foreground">
@@ -354,8 +366,8 @@ export const UserForm: React.FC<UserFormProps> = ({
                     </button>
                   )}
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">
+                <div className="flex justify-between flex-wrap gap-2">
+                  <span className="text-sm text-muted-foreground pt-1">
                     {filteredTelas.length} telas encontradas
                   </span>
                   <div className="space-x-2">
@@ -363,6 +375,7 @@ export const UserForm: React.FC<UserFormProps> = ({
                       variant="outline"
                       size="sm"
                       onClick={() => selectAllTelaPermissions('permissao_leitura')}
+                      disabled={filteredTelas.length === 0}
                     >
                       Dar leitura para todas
                     </Button>
@@ -370,6 +383,7 @@ export const UserForm: React.FC<UserFormProps> = ({
                       variant="outline"
                       size="sm"
                       onClick={() => selectAllTelaPermissions('permissao_escrita')}
+                      disabled={filteredTelas.length === 0}
                     >
                       Dar escrita para todas
                     </Button>
